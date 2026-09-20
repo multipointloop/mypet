@@ -339,9 +339,10 @@ class _WindowsPetHomeState extends State<WindowsPetHome> with WindowListener {
   }
 
   void _onTap(TapUpDetails d) {
-    final canvasPoint = Offset(
-        d.localPosition.dx - kSidePad, d.localPosition.dy - kBubbleSpace);
-    final region = engine.hitRegion(canvasPoint);
+    // 手势挂在 Positioned(kSidePad, kBubbleSpace) 上，localPosition 已经是
+    // 宠物画布坐标系的像素值 —— 不能再减内边距（历史 bug：命中区整体偏移
+    // 约 (20, 245) 画布像素，导致点尾巴落进身体区、只能听到下半身音效）。
+    final region = engine.hitRegion(d.localPosition);
     if (region != PetRegion.none) engine.react(region);
   }
 

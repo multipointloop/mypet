@@ -38,7 +38,6 @@ class AudioService {
     'click_body': 'click_body.wav',
     'click_tail': 'click_tail.wav',
     'land': 'land.wav',
-    'surprise': 'surprise.wav',
     'key': 'key.wav',
     'mew': 'mew.wav',
     'charge': 'charge.wav',

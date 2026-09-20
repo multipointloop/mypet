@@ -181,6 +181,38 @@ LRESULT HandleNCHitTest(HWND hwnd, LPARAM lparam) {
   return HTTRANSPARENT;
 }
 
+// ---------------- native tray quick menu ----------------
+
+constexpr UINT kQuickMenuBase = 4000;
+
+void ShowQuickMenu() {
+  HWND hwnd = g_main_window;
+  if (hwnd == nullptr) return;
+  HMENU menu = CreatePopupMenu();
+  if (menu == nullptr) return;
+  AppendMenuW(menu, MF_STRING, kQuickMenuBase + 0, L"\u653E\u5927   (Ctrl+Alt+Up)");
+  AppendMenuW(menu, MF_STRING, kQuickMenuBase + 1, L"\u7F29\u5C0F   (Ctrl+Alt+Down)");
+  AppendMenuW(menu, MF_STRING, kQuickMenuBase + 2, L"\u9F20\u6807\u7A7F\u900F (Ctrl+Alt+T)");
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(menu, MF_STRING, kQuickMenuBase + 3, L"\u8BBE\u7F6E\u9762\u677F (Ctrl+Alt+S)");
+  AppendMenuW(menu, MF_STRING, kQuickMenuBase + 4, L"\u9000\u51FA MyPet");
+  POINT pt{};
+  GetCursorPos(&pt);
+  // TrackPopupMenu needs a foreground owner and a WM_NULL afterwards,
+  // otherwise the menu is dismissed by the next input event.
+  SetForegroundWindow(hwnd);
+  const int cmd =
+      TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
+                     pt.x, pt.y, 0, hwnd, nullptr);
+  PostMessage(hwnd, WM_NULL, 0, 0);
+  DestroyMenu(menu);
+  if (cmd >= static_cast<int>(kQuickMenuBase) && g_channel != nullptr) {
+    flutter::EncodableMap args{{"id", cmd - static_cast<int>(kQuickMenuBase)}};
+    g_channel->InvokeMethod("onQuickMenu",
+                            std::make_unique<flutter::EncodableValue>(args));
+  }
+}
+
 // ---------------- Flutter child view subclassing ----------------
 
 WNDPROC g_childProc = nullptr;

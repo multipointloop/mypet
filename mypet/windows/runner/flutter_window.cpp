@@ -107,6 +107,9 @@ bool FlutterWindow::OnCreate() {
                 band_on);
           }
           result->Success();
+        } else if (call.method_name() == "showQuickMenu") {
+          mypet::ShowQuickMenu();
+          result->Success();
         } else {
           result->NotImplemented();
         }

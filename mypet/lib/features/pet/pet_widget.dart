@@ -107,6 +107,8 @@ class _WindowsPetHomeState extends State<WindowsPetHome> with WindowListener {
         _toggleClickThrough();
       }
     };
+    NativeChannel.instance.onQuickMenu =
+        (id) => WindowsWindowService.instance.handleQuickMenu(id);
     await NativeChannel.instance.start();
 
     windowManager.addListener(this);
@@ -366,6 +368,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> with WindowListener {
                 onClose: _closeSettings,
                 onScaleChanged: _setScaleFromPanel,
                 onApplied: _applyConfigChange,
+                onQuit: () => windowManager.destroy(),
                 maxScale: _maxPetScale,
               )
             : KeyedSubtree(

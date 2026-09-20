@@ -44,6 +44,12 @@ LRESULT HandleNCHitTest(HWND hwnd, LPARAM lparam);
 // Top-level window handle - the target of SetWindowRgn.
 void AttachMainWindow(HWND hwnd);
 
+// Native tray quick menu (shown at the cursor). The system_tray plugin pops
+// its own menu without making the window foreground, so it vanishes on the
+// next input event; this one does it properly. The chosen item is reported
+// back through the "onQuickMenu" channel method (id 0..4).
+void ShowQuickMenu();
+
 // The Flutter view lives in a CHILD window that covers the whole client
 // area and is hit-tested BEFORE the parent - the parent-level WM_NCHITTEST
 // never sees pet vs background. Subclassing the child routes its

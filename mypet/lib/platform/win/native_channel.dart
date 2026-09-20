@@ -13,6 +13,7 @@ class NativeChannel {
 
   void Function(String keyName, bool down)? onKey;
   void Function(int hotkeyId)? onHotkey;
+  void Function(int itemId)? onQuickMenu;
 
   bool _started = false;
 
@@ -29,9 +30,21 @@ class NativeChannel {
         case 'onHotkey':
           final id = (call.arguments as Map?)?['id'] as int? ?? -1;
           onHotkey?.call(id);
+        case 'onQuickMenu':
+          final id = (call.arguments as Map?)?['id'] as int? ?? -1;
+          onQuickMenu?.call(id);
       }
       return null;
     });
+  }
+
+  /// 图标右键的原生简易调整栏（放大/缩小/穿透/设置面板/退出）。
+  Future<void> showQuickMenu() async {
+    try {
+      await _ch.invokeMethod('showQuickMenu');
+    } on MissingPluginException {
+      // non-windows runner (tests); ignore
+    }
   }
 
   Future<void> setKeyHook(bool enabled) async {

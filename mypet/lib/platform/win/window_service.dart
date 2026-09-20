@@ -329,34 +329,36 @@ class WindowsWindowService {
         toolTip: 'MyPet 桌宠',
       );
 
-      final menu = Menu();
-      await menu.buildFrom([
-        MenuItemLabel(label: 'MyPet 猫娘桌宠', enabled: false),
-        MenuSeparator(),
-        MenuItemLabel(label: '放大  (Ctrl+Alt+↑)', onClicked: (_) => _fireScaleUp()),
-        MenuItemLabel(label: '缩小  (Ctrl+Alt+↓)', onClicked: (_) => _fireScaleDown()),
-        MenuItemLabel(label: '鼠标穿透  (Ctrl+Alt+T)',
-            onClicked: (_) => _fireClickThrough()),
-        MenuSeparator(),
-        MenuItemLabel(label: '设置面板', onClicked: (_) => _fireSettings()),
-        MenuItemLabel(label: '退出', onClicked: (_) => _fireQuit()),
-      ]);
-      await _tray.setContextMenu(menu);
-
       _tray.registerSystemTrayEventHandler((eventName) {
-        // 左键单击 = 打开/关闭设置面板（与常见应用一致）
-        if (eventName == kSystemTrayEventClick) {
-          _fireSettings();
-        } else if (eventName == kSystemTrayEventDoubleClick) {
-          // 双击兜底：部分系统把两次单击合成为双击
+        // 左键单击 = 打开/关闭设置面板（与常见应用一致）；双击同效（部分系统会合并）
+        if (eventName == kSystemTrayEventClick ||
+            eventName == kSystemTrayEventDoubleClick) {
           _fireSettings();
         } else if (eventName == kSystemTrayEventRightClick) {
-          // 右键 = 图标处的简易调整栏（放大/缩小/鼠标穿透/设置面板/退出）
-          _tray.popUpContextMenu();
+          // 右键 = 原生简易调整栏（放大/缩小/穿透/设置面板/退出）。
+          // 刻意不用 system_tray 自己的菜单：它 TrackPopupMenu 前不置前台、
+          // 之后也不补 WM_NULL，菜单会被下一次输入事件立刻关掉（一闪而过）。
+          NativeChannel.instance.showQuickMenu();
         }
       });
     } catch (_) {
       // tray icon is cosmetic; never block startup over it
+    }
+  }
+
+  /// 原生简易调整栏的选项：0 放大 / 1 缩小 / 2 穿透 / 3 设置面板 / 4 退出
+  void handleQuickMenu(int id) {
+    switch (id) {
+      case 0:
+        _fireScaleUp();
+      case 1:
+        _fireScaleDown();
+      case 2:
+        _fireClickThrough();
+      case 3:
+        _fireSettings();
+      case 4:
+        _fireQuit();
     }
   }
 

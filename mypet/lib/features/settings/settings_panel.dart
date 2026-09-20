@@ -22,6 +22,7 @@ class SettingsPanel extends StatelessWidget {
     required this.onScaleChanged,
     required this.onApplied,
     required this.maxScale,
+    required this.onQuit,
   });
 
   final RigData rig;
@@ -35,6 +36,9 @@ class SettingsPanel extends StatelessWidget {
 
   /// 本机可容纳的最大尺寸（由工作区高度换算，避免放大后腿部被切）。
   final double maxScale;
+
+  /// 退出应用（面板里的"退出 MyPet"按钮）。
+  final VoidCallback onQuit;
 
   static const double _kPreviewZoom = 0.30;
 
@@ -101,6 +105,19 @@ class SettingsPanel extends StatelessWidget {
                           _switch('记录诊断日志', cfg.diagnostics,
                               cfg.setDiagnostics,
                               subtitle: '默认开启；关闭后不再写入任何日志（保护隐私）'),
+                          ListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            dense: true,
+                            title: const Text('退出 MyPet',
+                                style: TextStyle(
+                                    fontSize: 13.5,
+                                    color: Color(0xFFB3261E))),
+                            subtitle: const Text('关闭桌宠并结束进程；托盘右键菜单里也有'),
+                            trailing:
+                                const Icon(Icons.power_settings_new, size: 18),
+                            onTap: () => _confirmQuit(context),
+                          ),
                           ListTile(
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 16),
@@ -248,6 +265,25 @@ class SettingsPanel extends StatelessWidget {
     }
     await cfg.setDialogueLines(next);
     onApplied();
+  }
+
+  Future<void> _confirmQuit(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('退出 MyPet？'),
+        content: const Text('桌宠将被关闭，设置会自动保存。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('退出')),
+        ],
+      ),
+    );
+    if (ok == true) onQuit();
   }
 
   Widget _header() {

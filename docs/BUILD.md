@@ -1,6 +1,6 @@
 # MyPet 构建与部署手册（Windows .exe / Android .apk）
 
-> 本机环境全部位于 `E:\desktop pet\dev\`（Flutter / JDK17 / Android SDK / Python3.11 /
+> 本机环境全部位于 `<PROJECT_ROOT>\dev\`（Flutter / JDK17 / Android SDK / Python3.11 /
 > Gradle 与 Pub 缓存），**不占用 C 盘**。任何终端先 `call dev\env.bat` 注入环境。
 
 ---
@@ -21,11 +21,12 @@ pip 走清华源、u2net 模型缓存在 `dev\models\`。
 
 重建环境（换机/清空后）：
 ```bat
-cd "E:\desktop pet\dev"
+cd "<PROJECT_ROOT>\dev"
 :: 1) 下载 flutter_windows_*.zip / OpenJDK17 zip / commandlinetools-win zip / python-3.11.9-embed-amd64.zip 到 downloads\
 :: 2) 解压 flutter→dev\flutter，jdk→dev\jdk17，cmdline-tools→dev\android-sdk\cmdline-tools\latest，python→dev\py311
 call env.bat
 ..\tools\setup_env.bat        :: pip + rembg + u2net 模型
+rem 注意：tools\setup_env.bat 为开发者本机脚本，未随仓库发布；依赖清单见 tools\requirements.txt
 setup_android.bat             :: sdkmanager 组件 + licenses + flutter config
 flutter doctor                :: VS C++ 工具链必须为 √（详见 §七）；除 Chrome/Network 外应全绿
 ```
@@ -35,8 +36,8 @@ flutter doctor                :: VS C++ 工具链必须为 √（详见 §七）
 ## 二、Windows 构建（.exe）
 
 ```bat
-call "E:\desktop pet\dev\env.bat"
-cd /d "E:\desktop pet\mypet"
+call "<PROJECT_ROOT>\dev\env.bat"
+cd /d "<PROJECT_ROOT>\mypet"
 flutter analyze                 &:: 静态检查（发版前必须 0 issues）
 flutter build windows --release
 ```
@@ -46,8 +47,8 @@ flutter build windows --release
 
 **交付打包（便携版）**：
 ```bat
-cd /d "E:\desktop pet\mypet\build\windows\x64\runner"
-powershell Compress-Archive -Force Release "E:\desktop pet\dist\MyPet-Windows.zip"
+cd /d "<PROJECT_ROOT>\mypet\build\windows\x64\runner"
+powershell Compress-Archive -Force Release "<PROJECT_ROOT>\dist\MyPet-Windows.zip"
 ```
 
 **可选安装器**（Inno Setup 脚本已附 `dist\setup.iss`）：安装 Inno Setup 6 后
@@ -65,7 +66,7 @@ powershell Compress-Archive -Force Release "E:\desktop pet\dist\MyPet-Windows.zi
 
 ### 1. 签名（已生成）
 ```
-android\mypet-release.jks     PKCS12, alias=mypet, 密码 mypet2026, 有效期 10000 天
+android\mypet-release.jks     PKCS12, alias=mypet, 口令见本机 key.properties（不入库）, 有效期 10000 天
 android\key.properties        storeFile=../mypet-release.jks
 ```
 > 正式发布前请自签一把新钥匙并妥善保管 jks + 密码；丢失将无法应用内升级。
@@ -73,8 +74,8 @@ android\key.properties        storeFile=../mypet-release.jks
 
 ### 2. 构建
 ```bat
-call "E:\desktop pet\dev\env.bat"
-cd /d "E:\desktop pet\mypet"
+call "<PROJECT_ROOT>\dev\env.bat"
+cd /d "<PROJECT_ROOT>\mypet"
 flutter build apk --release          &:: 通用 apk（arm64+armeabi+v7a+x64）
 :: 或分架构减小体积：
 flutter build apk --release --split-per-abi
@@ -135,8 +136,8 @@ adb install -r dist\MyPet.apk        &:: platform-tools 已在 dev\android-sdk
 2. 同一版本号必须同步到 `dist\setup.iss` 的 `#define MyAppVersion`（该文件的 AppId 为非法的 GUID，需一并修正）。
 3. 打包前核对：
    ```bat
-   findstr /n "^version:" "E:\desktop pet\mypet\pubspec.yaml"
-   findstr /n "MyAppVersion" "E:\desktop pet\dist\setup.iss"
+   findstr /n "^version:" "<PROJECT_ROOT>\mypet\pubspec.yaml"
+   findstr /n "MyAppVersion" "<PROJECT_ROOT>\dist\setup.iss"
    ```
 4. 两端重新构建后，用新 apk 覆盖安装旧版验证（versionCode 不足会直接安装失败）。
 5. 每次发版在下表追加一行。
@@ -170,9 +171,9 @@ adb install -r dist\MyPet.apk        &:: platform-tools 已在 dev\android-sdk
 ```bat
 :: 下载 vs_BuildTools.exe 后（管理员运行），示意命令：
 vs_BuildTools.exe --quiet --wait --norestart ^
-  --installPath "E:\desktop pet\dev\vs_buildtools" ^
+  --installPath "<PROJECT_ROOT>\dev\vs_buildtools" ^
   --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended ^
-  --cache "E:\desktop pet\dev\downloads\vs-cache"
+  --cache "<PROJECT_ROOT>\dev\downloads\vs-cache"
 ```
 
 > 工作负载 ID：Build Tools 用 `Microsoft.VisualStudio.Workload.VCTools`；
@@ -182,7 +183,7 @@ vs_BuildTools.exe --quiet --wait --norestart ^
 ### 2. 验收工具链
 
 ```bat
-call "E:\desktop pet\dev\env.bat"
+call "<PROJECT_ROOT>\dev\env.bat"
 flutter doctor -v
 ```
 
@@ -190,14 +191,14 @@ flutter doctor -v
 
 ```
 [√] Visual Studio - develop Windows apps (Visual Studio 生成工具 2022 17.14.41 (September 2026))
-    • Visual Studio at E:\desktop pet\dev\vs_buildtools
+    • Visual Studio at <PROJECT_ROOT>\dev\vs_buildtools
     • Windows 10 SDK version 10.0.26100.0
 ```
 
 ### 3. 重装后第一次构建
 
 ```bat
-cd /d "E:\desktop pet\mypet"
+cd /d "<PROJECT_ROOT>\mypet"
 flutter clean
 flutter pub get
 flutter build windows --release
@@ -207,6 +208,6 @@ flutter build windows --release
 
 ### 4. 已知告警（可忽略，不要为此改路径）
 
-- `flutter doctor` 报 Android SDK 路径含空格（`E:\desktop pet\dev\android-sdk`）：本项目 APK 实测可正常构建；
+- `flutter doctor` 报 Android SDK 路径含空格（`<PROJECT_ROOT>\dev\android-sdk`）：本项目 APK 实测可正常构建；
 - `flutter doctor` 报 `Network resources` / Chrome 缺失：不影响 Windows/Android 构建；
 - 因 C 盘空间紧张卸载 VS 后，`flutter build windows` 会报 `Unable to find suitable Visual Studio toolchain`——按步骤 1 装回即可，**不要改任何代码路径**。

@@ -142,7 +142,7 @@ gazeTarget = |v|>1 ? v/|v| : v // 单位圆盘截断：方向 + 距离强度
 ## 第三步：项目工程目录结构
 
 ```
-E:\desktop pet\
+<PROJECT_ROOT>\
 ├─ source_assets\           # 原始素材 1.jpg + 抠图结果 pet_full.png / pet_preview.jpg（不打包）
 ├─ docs\                    # DESIGN.md(本文) / ASSET_GUIDE.md / BUILD.md
 ├─ tools\                   # Python 3.11 素材管线（全部本地化，可重复执行）

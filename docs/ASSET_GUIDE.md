@@ -9,7 +9,7 @@
 ## 一、当前自动管线（已完成，可随时重跑）
 
 ```bat
-cd "E:\desktop pet\dev"
+cd "<PROJECT_ROOT>\dev"
 call env.bat
 cd ..
 python tools\cutout.py      :: source_assets\1.jpg → source_assets\pet_full.png（保持 992×1400 画布）

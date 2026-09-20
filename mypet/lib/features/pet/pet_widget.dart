@@ -147,6 +147,13 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     await Config.instance.applyToPlatform();
   }
 
+  /// 面板内改动即时下推平台（音效/音量/Bongo/自启…）。
+  /// 重操作已幂等（见 setAutostart），因此此处不做节流，避免吞掉快速连点的开关。
+  void _applyConfigChange() {
+    Config.instance.applyToPlatform();
+    if (mounted) setState(() {});
+  }
+
   /// 面板内拖尺寸滑杆：只更新配置与右侧实时预览，绝不缩放窗口。
   void _setScaleFromPanel(double v) {
     Config.instance.setScale(v);
@@ -265,6 +272,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
                 engine: engine,
                 onClose: _closeSettings,
                 onScaleChanged: _setScaleFromPanel,
+                onApplied: _applyConfigChange,
               )
             : KeyedSubtree(
                 key: const ValueKey('pet'),

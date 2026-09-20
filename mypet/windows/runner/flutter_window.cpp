@@ -41,8 +41,22 @@ bool FlutterWindow::OnCreate() {
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
         if (call.method_name() == "setKeyHook") {
-          const auto* enabled = std::get_if<bool>(call.arguments());
-          mypet::SetKeyHookEnabled(enabled != nullptr && *enabled);
+          // Dart sends {"enabled": bool}; a bare bool is also accepted.
+          // NOTE: keep all comments ASCII - MSVC without /utf-8 mis-decodes
+          // multi-byte characters and can swallow the following line.
+          bool hook_enabled = false;
+          if (const auto* direct = std::get_if<bool>(call.arguments())) {
+            hook_enabled = *direct;
+          } else if (const auto* args = std::get_if<flutter::EncodableMap>(
+                         call.arguments())) {
+            auto it = args->find(flutter::EncodableValue("enabled"));
+            if (it != args->end()) {
+              if (const auto* flag = std::get_if<bool>(&it->second)) {
+                hook_enabled = *flag;
+              }
+            }
+          }
+          mypet::SetKeyHookEnabled(hook_enabled);
           result->Success();
         } else if (call.method_name() == "setHitTest") {
           const auto* map = std::get_if<flutter::EncodableMap>(call.arguments());

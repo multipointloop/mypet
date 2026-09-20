@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import '../../core/audio_service.dart';
 import '../../core/config.dart';
 import '../../core/rig_model.dart';
+import '../../core/trace.dart';
 import '../../core/rig_view.dart' show PetPose;
 import 'dialogue_lines.dart' show pickLine;
 
@@ -60,7 +61,7 @@ class PetEngine with ChangeNotifier {
   Offset windowPos = Offset.zero; // logical screen px
   Offset windowVel = Offset.zero;
   double windowW = 300, windowH = 460;
-  double groundY = 1048576.0; // logical px, work-area bottom - windowH
+  double groundY = 1048576.0; // logical px：地面线 = 工作区底边；落地时 windowPos.dy = groundY - windowH
   double devicePixelRatio = 1;
 
   /// Platform bridge: applied once per tick when the window must move
@@ -333,6 +334,7 @@ class PetEngine with ChangeNotifier {
 
   void startFall() {
     physicsActive = true;
+    Trace.log('physics start y=${windowPos.dy.toStringAsFixed(0)} groundY=${groundY.toStringAsFixed(0)} winH=${windowH.toStringAsFixed(0)}');
   }
 
 
@@ -374,6 +376,7 @@ class PetEngine with ChangeNotifier {
         if (windowVel.dx.abs() < 15) {
           physicsActive = false;
           windowVel = Offset.zero;
+          Trace.log('physics settle y=${windowPos.dy.toStringAsFixed(0)}');
         }
       }
     }

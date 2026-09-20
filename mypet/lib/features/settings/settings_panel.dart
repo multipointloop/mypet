@@ -19,12 +19,17 @@ class SettingsPanel extends StatelessWidget {
     required this.engine,
     required this.onClose,
     required this.onScaleChanged,
+    required this.onApplied,
   });
 
   final RigData rig;
   final PetEngine engine;
   final VoidCallback onClose;
   final ValueChanged<double> onScaleChanged;
+
+  /// 任何改动落库后回调一次：把设置即时下推平台（音效/音量/Bongo/自启…）。
+  /// 穿透与窗口几何由 WindowsWindowService 在面板态闸门内延后处理。
+  final VoidCallback onApplied;
 
   static const double _kPreviewZoom = 0.30;
 
@@ -217,7 +222,10 @@ class SettingsPanel extends StatelessWidget {
           min: min,
           max: max,
           divisions: ((max - min) >= 1 ? ((max - min) * 100).round() : 70),
-          onChanged: onChanged,
+          onChanged: (v) {
+            onChanged(v);
+            onApplied();
+          },
         ),
       ],
     );
@@ -233,7 +241,10 @@ class SettingsPanel extends StatelessWidget {
           : Text(subtitle,
               style: const TextStyle(fontSize: 11, color: Colors.black45)),
       value: value,
-      onChanged: onChanged,
+      onChanged: (v) {
+        onChanged(v);
+        onApplied();
+      },
     );
   }
 }

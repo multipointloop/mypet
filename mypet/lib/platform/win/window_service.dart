@@ -72,15 +72,17 @@ class WindowsWindowService {
 
     Trace.log('resizeToPet enter scale=$petScale');
     final old = await windowManager.getPosition();
-    Trace.log('resizeToPet got pos=$old');
+    Trace.log('resizeToPet got pos=${old.dx.toStringAsFixed(0)},${old.dy.toStringAsFixed(0)}');
     final area = await workAreaRectLogical();
     Trace.log('resizeToPet got area=${area.bottom}');
     final Offset pos;
     if (!_placedOnce) {
-      pos = Offset(area.right - winW - 60, area.bottom - winH - 8);
+      pos = Offset(area.right - winW - 60,
+          (area.bottom - winH - 8).clamp(area.top, area.bottom - winH).toDouble());
       _placedOnce = true;
     } else {
-      pos = Offset(old.dx, old.dy + (engine.windowH - winH));
+      pos = Offset(old.dx,
+          (old.dy + (engine.windowH - winH)).clamp(area.top, area.bottom - winH).toDouble());
     }
     Trace.log('resizeToPet before setSize ${winW}x$winH');
     await windowManager.setSize(Size(winW, winH));
@@ -90,7 +92,8 @@ class WindowsWindowService {
     await windowManager.setPosition(pos);
     Trace.log('resizeToPet after setPosition');
     engine.windowPos = pos;
-    engine.groundY = area.bottom - winH;
+    // 地面线 = 工作区底边；落地位置由 _stepPhysics 换算为 groundY - windowH
+    engine.groundY = area.bottom;
     Trace.log('resizeToPet done');
   }
 
@@ -183,7 +186,9 @@ class WindowsWindowService {
     final pos = await windowManager.getPosition();
     final size = await windowManager.getSize();
     _savedPetBounds = Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
-    Trace.log('enterPanelMode saved=$_savedPetBounds');
+    Trace.log('enterPanelMode saved='
+        '${pos.dx.toStringAsFixed(0)},${pos.dy.toStringAsFixed(0)} '
+        '${size.width.toStringAsFixed(0)}x${size.height.toStringAsFixed(0)}');
 
     if (e != null) {
       // 加固点 1：面板开着时停止落体，否则 _stepPhysics 会把面板窗口自己拖下去
@@ -231,14 +236,20 @@ class WindowsWindowService {
           h = r.canvasH * e.scale + _kBubbleSpace;
         }
       }
-      // 加固点 4：脚底不动 —— 变高向上长，变矮向下收
-      final top = b.top + (b.height - h);
+      // 加固点 4：脚底不动 —— 变高向上长，变矮向下收；并夹在工作区内
+      final area = await workAreaRectLogical();
+      final top = (b.top + (b.height - h))
+          .clamp(area.top, area.bottom - h)
+          .toDouble();
       await windowManager.setSize(Size(w, h));
       await windowManager.setPosition(Offset(b.left, top));
       e.windowW = w;
       e.windowH = h;
       e.windowPos = Offset(b.left, top);
-      e.groundY = (await workAreaRectLogical()).bottom - h;
+      e.groundY = area.bottom;
+      Trace.log('exitPanelMode restored='
+          '${b.left.toStringAsFixed(0)},${top.toStringAsFixed(0)} '
+          '${w.toStringAsFixed(0)}x${h.toStringAsFixed(0)}');
       if (_savedPhysics) e.startFall();
     }
 
@@ -250,7 +261,10 @@ class WindowsWindowService {
     await NativeChannel.instance.setKeyHook(enabled);
   }
 
+  bool? _autostartApplied;
+
   Future<void> setAutostart(bool enabled) async {
+    if (_autostartApplied == enabled) return; // 幂等：面板高频回调不重复写注册表
     if (!_autostartReady) {
       launchAtStartup.setup(
         appName: 'mypet',
@@ -264,6 +278,7 @@ class WindowsWindowService {
     } else {
       await launchAtStartup.disable();
     }
+    _autostartApplied = enabled;
   }
 
   /// Primary monitor work area (excludes taskbar) in logical px.

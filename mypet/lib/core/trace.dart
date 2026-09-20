@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 /// 轻量诊断日志：写入应用专属数据目录，滚动切割（单文件 2MB，最多 5 个文件）。
 ///
-/// * 目录由 path_provider 解析，flutter clean / 换机后依然有效（不再硬编码 E: 盘）；
+/// * 目录由 path_provider 解析，flutter clean / 换机后依然有效（不再硬编码盘符）；
 /// * 可在设置页整体关闭（默认开启）；
 /// * 异步批量落盘，永不阻塞 UI；任何写入失败一律静默。
 class Trace {

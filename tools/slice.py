@@ -33,19 +33,57 @@ ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "mypet" / "assets"
 
 
-def fill_patch(arr: np.ndarray, rect: list[int]) -> None:
-    """Fill rect with a per-row horizontal gradient from border pixels."""
+def fill_patch(arr: np.ndarray, rect: list[int], feather: int = 6) -> None:
+    """Fill rect with a smooth skin-toned gradient (v2).
+
+    v2 changes vs the first version:
+      * border colours are sampled with a MEDIAN over a wider band, so lashes /
+        bangs at the patch edge no longer darken the fill;
+      * the replacement RGB is feathered into the original border pixels, which
+        removes the visible hard-edged rectangle that showed on light desktops.
+    """
     x0, y0, x1, y1 = rect
     h, w = y1 - y0, x1 - x0
     if h <= 0 or w <= 0:
         return
-    left = arr[y0:y1, max(x0 - 2, 0):x0, :3].mean(axis=1)   # (h, 3)
-    right = arr[y0:y1, x1:min(x1 + 2, arr.shape[1]), :3].mean(axis=1)
-    t = np.linspace(0.0, 1.0, w, dtype=np.float32)[None, :, None]  # (1,w,1)
+    band = 4
+    left = np.median(arr[y0:y1, max(x0 - band, 0):x0, :3], axis=1)
+    right = np.median(arr[y0:y1, x1:min(x1 + band, arr.shape[1]), :3], axis=1)
+    t = np.linspace(0.0, 1.0, w, dtype=np.float32)[None, :, None]
     grad = left[:, None, :] * (1 - t) + right[:, None, :] * t
     region = arr[y0:y1, x0:x1]
-    region[:, :, :3] = np.clip(grad, 0, 255).astype(np.uint8)
+    original = region[:, :, :3].astype(np.float32).copy()
+    filled = np.clip(grad, 0, 255).astype(np.float32)
+    fx = np.minimum(np.arange(w), np.arange(w)[::-1]).astype(np.float32)
+    fy = np.minimum(np.arange(h), np.arange(h)[::-1]).astype(np.float32)
+    dist = np.minimum(fx[None, :], fy[:, None])
+    ramp = np.clip(dist / float(feather), 0.0, 1.0)[:, :, None]
+    region[:, :, :3] = (filled * ramp + original * (1.0 - ramp)).astype(np.uint8)
     region[:, :, 3] = 255
+
+
+def feather_border(piece: np.ndarray, px: int = 4) -> None:
+    """Ramp alpha down over the outermost px pixels (eye layers blend into the face)."""
+    h, w = piece.shape[:2]
+    a = piece[:, :, 3].astype(np.float32)
+    ramp = np.ones((h, w), dtype=np.float32)
+    for i in range(px):
+        f = (i + 1) / float(px + 1)
+        ramp[i, :] = np.minimum(ramp[i, :], f)
+        ramp[h - 1 - i, :] = np.minimum(ramp[h - 1 - i, :], f)
+        ramp[:, i] = np.minimum(ramp[:, i], f)
+        ramp[:, w - 1 - i] = np.minimum(ramp[:, w - 1 - i], f)
+    piece[:, :, 3] = np.clip(a * ramp, 0, 255).astype(np.uint8)
+
+
+def feather_bottom(piece: np.ndarray, px: int = 14) -> None:
+    """Fade the bottom edge so the head/body collar overlap shows no hard line."""
+    h = piece.shape[0]
+    a = piece[:, :, 3].astype(np.float32)
+    ramp = np.ones(h, dtype=np.float32)
+    for i in range(px):
+        ramp[h - 1 - i] = (i + 1) / float(px + 1)
+    piece[:, :, 3] = np.clip(a * ramp[:, None], 0, 255).astype(np.uint8)
 
 
 def erase_color_mask(piece: np.ndarray, rect: list[int], pred: str,
@@ -110,6 +148,10 @@ def main() -> int:
                 piece, mask_cfg["rect"], mask_cfg.get("pred", "pink"),
                 int(mask_cfg.get("dilate", 2)), (x0, y0),
             )
+        if layer["name"] in ("eyeL", "eyeR"):
+            feather_border(piece, 4)
+        elif layer["name"] == "head":
+            feather_bottom(piece, 14)
         out = out_dir / f"{layer['name']}.png"
         Image.fromarray(piece, "RGBA").save(out)
         print(f"[slice] {out.name:<12} crop=({x0},{y0})-({x1},{y1}) {x1-x0}x{y1-y0}")

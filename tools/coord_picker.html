@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>MyPet · rig.json 坐标取点工具</title>
+<style>
+  :root { --bg:#1b1e24; --panel:#242832; --line:#3a404d; --txt:#e8eaf0; --accent:#ff8ab5; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+         display:flex; height:100vh; }
+  #left { flex:1; overflow:auto; padding:12px; position:relative; }
+  #side { width:330px; background:var(--panel); border-left:1px solid var(--line);
+          padding:14px; overflow-y:auto; flex-shrink:0; }
+  h1 { font-size:16px; margin:0 0 10px; color:var(--accent); }
+  h2 { font-size:13px; margin:14px 0 6px; color:#9fb4cc; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  canvas#stage { background:#111; cursor:crosshair; display:block; }
+  #lens { position:fixed; pointer-events:none; border:1px solid var(--accent);
+          border-radius:50%; display:none; z-index:9; background:#000; }
+  label { display:block; margin:4px 0 2px; color:#b8c2d0; font-size:12px; }
+  select, input[type=text], input[type=number] {
+    width:100%; background:#171a20; color:var(--txt); border:1px solid var(--line);
+    border-radius:4px; padding:4px 6px; font-size:13px; }
+  button { background:#2f3542; color:var(--txt); border:1px solid var(--line);
+           border-radius:4px; padding:5px 10px; cursor:pointer; margin:2px 2px 2px 0; font-size:12px; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); color:#222; font-weight:600; border:0; }
+  .row { display:flex; gap:6px; align-items:center; }
+  textarea { width:100%; height:230px; background:#12151a; color:#cde3c8;
+             border:1px solid var(--line); border-radius:4px; font:11px/1.4 Consolas, monospace; }
+  .items { font-size:12px; }
+  .items div { padding:2px 6px; border-radius:3px; cursor:pointer; display:flex; justify-content:space-between; }
+  .items div:hover { background:#2c313d; }
+  .items div.sel { background:#3a2f3a; outline:1px solid var(--accent); }
+  .items b { color:var(--accent); font-weight:600; }
+  .hint { color:#7d8794; font-size:11px; margin-top:4px; }
+  .badge { display:inline-block; background:#313845; border-radius:3px; padding:0 6px; margin-left:4px; }
+</style>
+</head>
+<body>
+<div id="left">
+  <h1>MyPet 坐标取点工具 <span class="badge" id="imgInfo">未加载图片</span></h1>
+  <div class="row">
+    <button onclick="fileInput.click()">打开图片…</button>
+    <button onclick="tryLoad('../1.jpg')">加载 ../1.jpg</button>
+    <button onclick="tryLoad('../mypet/assets/parts/pet_full.png')">加载抠图结果</button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <span class="hint">画布坐标 = 原图像素坐标（左上角为原点），与 rig.json 完全一致</span>
+  </div>
+  <canvas id="stage"></canvas>
+  <canvas id="lens" width="160" height="160"></canvas>
+</div>
+
+<div id="side">
+  <h2>模式</h2>
+  <div class="row">
+    <select id="mode">
+      <option value="point">锚点模式：点击放置当前锚点</option>
+      <option value="rect">矩形模式：拖拽绘制当前目标</option>
+      <option value="del">删除模式：点击已有项删除</option>
+    </select>
+  </div>
+
+  <h2>锚点（点）</h2>
+  <div class="items" id="pointList"></div>
+  <label>自定义锚点名</label>
+  <div class="row"><input type="text" id="newPointName" placeholder="如 handL">
+    <button onclick="addPoint()">＋</button></div>
+
+  <h2>矩形目标（crop / 命中区 / 眼底修补）</h2>
+  <div class="items" id="rectList"></div>
+
+  <h2>导入 / 导出</h2>
+  <div class="row">
+    <button onclick="exportJson()">生成 JSON</button>
+    <button class="primary" onclick="copyJson()">复制到剪贴板</button>
+    <button onclick="importJson()">导入 rig.json</button>
+  </div>
+  <input type="file" id="rigInput" accept=".json" style="display:none">
+  <label class="hint">导出仅包含几何信息；若导入已有 rig.json，params 等字段会原样保留。</label>
+  <textarea id="out" spellcheck="false"></textarea>
+  <p class="hint">流程：加载 1.jpg → 矩形模式画出 tail/body/head/eyeL/eyeR 五个图层裁剪框
+   和 patchL/patchR（稍大于眼睛、用于盖住原眼睛）→ 锚点模式点出 eyeL/eyeR（瞳孔中心）、
+   headPivot（脖颈）、tailPivot（尾根）、feet（脚底中心）→ region:head/body/tail
+  （点击命中区）→ 生成 JSON 粘贴回 mypet/assets/rig.json。</p>
+</div>
+
+<script>
+"use strict";
+const PRESET_POINTS = ["eyeL", "eyeR", "headPivot", "tailPivot", "feet"];
+const PRESET_RECTS  = ["layer:tail", "layer:body", "layer:head", "layer:eyeL", "layer:eyeR",
+                       "patch:patchL", "patch:patchR",
+                       "region:head", "region:body", "region:tail"];
+const RECT_LABEL = { "layer:":"图层裁剪", "patch:":"眼底修补", "region:":"命中区" };
+
+const stage = document.getElementById("stage"), sctx = stage.getContext("2d");
+const lens = document.getElementById("lens"), lctx = lens.getContext("2d");
+const state = { img:null, scale:1, points:{}, rects:{}, dragging:null,
+                curPoint:"eyeL", curRect:"layer:head" };
+let rigExtra = {};   // preserved non-geometry fields from an imported rig.json
+
+PRESET_POINTS.forEach(p => state.points[p] = null);
+PRESET_RECTS.forEach(r => state.rects[r] = null);
+
+function tryLoad(src) { const im = new Image(); im.onload = () => setImg(im);
+  im.onerror = () => alert("加载失败：" + src); im.src = src; }
+document.getElementById("fileInput").onchange = e => { const f = e.target.files[0];
+  if (!f) return; const im = new Image(); im.onload = () => setImg(im);
+  im.src = URL.createObjectURL(f); };
+
+function setImg(im) {
+  state.img = im;
+  const maxW = Math.min(1200, window.innerWidth - 380);
+  state.scale = Math.min(maxW / im.naturalWidth, (window.innerHeight - 90) / im.naturalHeight, 1);
+  stage.width = im.naturalWidth * state.scale;
+  stage.height = im.naturalHeight * state.scale;
+  document.getElementById("imgInfo").textContent =
+    `${im.naturalWidth} x ${im.naturalHeight} px  (显示 ${Math.round(state.scale*100)}%)`;
+  redraw(); renderLists();
+}
+
+function toImg(e) { const r = stage.getBoundingClientRect();
+  return [ (e.clientX - r.left) / state.scale, (e.clientY - r.top) / state.scale ]; }
+
+function redraw() {
+  if (!state.img) return;
+  sctx.clearRect(0, 0, stage.width, stage.height);
+  sctx.drawImage(state.img, 0, 0, stage.width, stage.height);
+  const s = state.scale;
+  sctx.lineWidth = 1.5; sctx.font = "12px Consolas";
+  for (const [name, v] of Object.entries(state.rects)) { if (!v) continue;
+    const col = name.startsWith("layer:") ? "#ff8ab5" : name.startsWith("patch:") ? "#7ee0a3" : "#6db9ff";
+    sctx.strokeStyle = col; sctx.setLineDash([5,3]);
+    sctx.strokeRect(v[0]*s, v[1]*s, (v[2]-v[0])*s, (v[3]-v[1])*s);
+    sctx.setLineDash([]);
+    sctx.fillStyle = col; sctx.fillText(name, v[0]*s+2, v[1]*s-4 < 10 ? v[1]*s+13 : v[1]*s-4);
+  }
+  for (const [name, v] of Object.entries(state.points)) { if (!v) continue;
+    sctx.strokeStyle = "#ffd166"; sctx.lineWidth = 1.5;
+    sctx.beginPath(); sctx.arc(v[0]*s, v[1]*s, 6, 0, 7); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(v[0]*s-10, v[1]*s); sctx.lineTo(v[0]*s+10, v[1]*s);
+    sctx.moveTo(v[0]*s, v[1]*s-10); sctx.lineTo(v[0]*s, v[1]*s+10); sctx.stroke();
+    sctx.fillStyle = "#ffd166"; sctx.fillText(name, v[0]*s+9, v[1]*s-7);
+  }
+}
+
+/* ---- lens ---- */
+stage.addEventListener("mousemove", e => {
+  const [x, y] = toImg(e);
+  if (state.dragging === "rect") { state.rects[state.curRect] =
+      [state.rectStart[0], state.rectStart[1], x, y].map(Math.round); redraw(); }
+  else if (state.dragging?.[0] === "movePoint") {
+    state.points[state.dragging[1]] = [Math.round(x), Math.round(y)]; redraw(); }
+  else if (state.dragging?.[0] === "moveRect") {
+    const [n, ox, oy, orig] = state.dragging;
+    state.rects[n] = [orig[0]+Math.round(x-ox), orig[1]+Math.round(y-oy),
+                      orig[2]+Math.round(x-ox), orig[3]+Math.round(y-oy)]; redraw(); }
+  const Z = 8;
+  lens.style.display = state.img ? "block" : "none";
+  lens.style.left = (e.clientX + 18) + "px"; lens.style.top = (e.clientY + 18) + "px";
+  if (state.img) { lctx.fillStyle = "#000"; lctx.fillRect(0,0,160,160);
+    lctx.drawImage(state.img, x-Z, y-Z, 2*Z, 2*Z, 0, 0, 160, 160);
+    lctx.strokeStyle = "#ff8ab5"; lctx.beginPath();
+    lctx.moveTo(80,0); lctx.lineTo(80,160); lctx.moveTo(0,80); lctx.lineTo(160,80); lctx.stroke();
+    lctx.font = "11px Consolas"; lctx.fillStyle = "#ffd166";
+    lctx.fillText(`${Math.round(x)},${Math.round(y)}`, 6, 14); }
+});
+stage.addEventListener("mouseleave", () => lens.style.display = "none");
+stage.addEventListener("mousedown", e => {
+  if (!state.img) return;
+  const [x, y] = toImg(e); const mode = document.getElementById("mode").value;
+  if (mode === "point") { state.points[state.curPoint] = [Math.round(x), Math.round(y)];
+    state.dragging = ["movePoint", state.curPoint]; redraw(); renderLists(); return; }
+  if (mode === "del") {
+    for (const [n, v] of Object.entries(state.points))
+      if (v && Math.hypot(v[0]-x, v[1]-y) < 10/state.scale) { state.points[n] = null; break; }
+    for (const [n, v] of Object.entries(state.rects))
+      if (v && x>=v[0]&&x<=v[2]&&y>=v[1]&&y<=v[3]) { state.rects[n] = null; break; }
+    redraw(); renderLists(); return; }
+  // rect mode: click inside an existing rect starts moving it
+  for (const [n, v] of Object.entries(state.rects))
+    if (v && x>=v[0]&&x<=v[2]&&y>=v[1]&&y<=v[3]) {
+      state.dragging = ["moveRect", n, x, y, [...v]]; return; }
+  state.dragging = "rect"; state.rectStart = [x, y];
+  state.rects[state.curRect] = [Math.round(x), Math.round(y), Math.round(x), Math.round(y)];
+});
+window.addEventListener("mouseup", () => { if (state.dragging) { state.dragging = null;
+  renderLists(); } });
+
+/* ---- side lists ---- */
+function renderLists() {
+  const pl = document.getElementById("pointList"); pl.innerHTML = "";
+  for (const [n, v] of Object.entries(state.points)) {
+    const d = document.createElement("div");
+    d.className = n === state.curPoint ? "sel" : "";
+    d.innerHTML = `<b>${n}</b><span>${v ? v[0]+","+v[1] : "—"}</span>`;
+    d.onclick = () => { state.curPoint = n;
+      document.getElementById("mode").value = "point"; renderLists(); };
+    pl.appendChild(d);
+  }
+  const rl = document.getElementById("rectList"); rl.innerHTML = "";
+  for (const [n, v] of Object.entries(state.rects)) {
+    const d = document.createElement("div");
+    d.className = n === state.curRect ? "sel" : "";
+    const kind = RECT_LABEL[n.split(":")[0]] || "";
+    d.innerHTML = `<b>${n}</b><span>${kind} ${v ? (v[2]-v[0])+"x"+(v[3]-v[1]) : "—"}</span>`;
+    d.onclick = () => { state.curRect = n;
+      document.getElementById("mode").value = "rect"; renderLists(); };
+    rl.appendChild(d);
+  }
+}
+function addPoint() { const n = document.getElementById("newPointName").value.trim();
+  if (!n || n in state.points) return; state.points[n] = null; state.curPoint = n; renderLists(); }
+
+/* ---- import / export ---- */
+function exportJson() {
+  if (!state.img) { alert("先加载图片"); return; }
+  const w = state.img.naturalWidth, h = state.img.naturalHeight;
+  const geo = {
+    canvas: { w, h },
+    layers: ["tail","body","head","eyeL","eyeR"].map(n => ({
+      name: n, crop: state.rects["layer:"+n] || null, patched: n === "body" || n === "head" })),
+    eyePatches: ["patchL","patchR"].map(n => state.rects["patch:"+n] || null)
+      .filter(Boolean),
+    anchors: Object.fromEntries(Object.entries(state.points).filter(([,v]) => v)
+      .map(([k,v]) => [k, v])),
+    regions: Object.fromEntries(["head","body","tail"]
+      .map(n => [n, state.rects["region:"+n] || null]).filter(([,v]) => v)),
+  };
+  const out = Object.assign({}, rigExtra, geo);
+  if (!out.params) out.params = { pupilMax: [6, 3.5], headShift: [3, 2], headRotDeg: 4,
+    smoothing: 12, idleBlinkSecs: [2, 6], dialogueIdleSecs: [20, 45], gravity: 2000, bounce: 0.35 };
+  document.getElementById("out").value = JSON.stringify(out, null, 2);
+}
+function copyJson() { const t = document.getElementById("out");
+  if (!t.value) exportJson();
+  t.select();
+  (navigator.clipboard?.writeText(t.value) ?? Promise.reject())
+    .catch(() => document.execCommand("copy"));
+  t.blur(); }
+document.getElementById("rigInput").onchange = e => { const f = e.target.files[0];
+  if (!f) return; f.text().then(txt => { const j = JSON.parse(txt);
+    rigExtra = j; hydrate(j); alert("已导入，可在画布上继续微调"); }); };
+function importJson() { document.getElementById("rigInput").click(); }
+function hydrate(j) {
+  (j.layers || []).forEach(l => state.rects["layer:"+l.name] = l.crop || null);
+  (j.eyePatches || []).forEach((p, i) => state.rects["patch:patch"+(i?"R":"L")] = p || null);
+  Object.entries(j.anchors || {}).forEach(([k, v]) => state.points[k] = v || null);
+  Object.entries(j.regions || {}).forEach(([k, v]) => state.rects["region:"+k] = v || null);
+  redraw(); renderLists();
+}
+window.addEventListener("resize", () => state.img && setImg(state.img));
+renderLists();
+</script>
+</body>
+</html>

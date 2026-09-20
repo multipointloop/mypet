@@ -1,0 +1,162 @@
+#include "win32_key_hook.h"
+
+#include <flutter/encodable_value.h>
+#include <flutter/method_channel.h>
+
+#include <cctype>
+#include <cstdio>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+
+namespace mypet {
+namespace {
+
+flutter::MethodChannel<flutter::EncodableValue>* g_channel = nullptr;
+HHOOK g_hook = nullptr;
+std::set<DWORD> g_held;  // keys currently down, for repeat suppression
+
+std::string VkName(DWORD vk) {
+  static const std::map<DWORD, std::string> named = {
+      {VK_SPACE, "Space"},       {VK_RETURN, "Enter"},
+      {VK_ESCAPE, "Escape"},     {VK_BACK, "Backspace"},
+      {VK_TAB, "Tab"},           {VK_CAPITAL, "CapsLock"},
+      {VK_SHIFT, "Shift"},       {VK_LSHIFT, "Shift"},
+      {VK_RSHIFT, "Shift"},      {VK_CONTROL, "Ctrl"},
+      {VK_LCONTROL, "Ctrl"},     {VK_RCONTROL, "Ctrl"},
+      {VK_MENU, "Alt"},          {VK_LMENU, "Alt"},
+      {VK_RMENU, "Alt"},         {VK_UP, "ArrowUp"},
+      {VK_DOWN, "ArrowDown"},    {VK_LEFT, "ArrowLeft"},
+      {VK_RIGHT, "ArrowRight"},  {VK_DELETE, "Delete"},
+      {VK_HOME, "Home"},         {VK_END, "End"},
+      {VK_PRIOR, "PageUp"},      {VK_NEXT, "PageDown"},
+      {VK_INSERT, "Insert"},     {VK_LWIN, "Win"},
+      {VK_RWIN, "Win"},
+  };
+  auto it = named.find(vk);
+  if (it != named.end()) return it->second;
+
+  const UINT c = MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR);
+  if (c >= 'a' && c <= 'z') return std::string(1, static_cast<char>(std::toupper(c)));
+  if (c >= 'A' && c <= 'Z') return std::string(1, static_cast<char>(c));
+  if (c >= '0' && c <= '9') return std::string(1, static_cast<char>(c));
+
+  char buf[16];
+  std::snprintf(buf, sizeof(buf), "VK%02X", static_cast<unsigned>(vk));
+  return buf;
+}
+
+LRESULT CALLBACK KeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
+  if (nCode == HC_ACTION && g_channel) {
+    const auto* info = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+    // ignore programmatic injections so we never echo our own UI events
+    if (!(info->flags & LLKHF_INJECTED)) {
+      const bool down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+      bool report = false;
+      if (down) {
+        report = g_held.insert(info->vkCode).second;  // suppress auto-repeat
+      } else {
+        report = g_held.erase(info->vkCode) > 0;
+      }
+      if (report) {
+        flutter::EncodableMap args{
+            {"name", VkName(info->vkCode)},
+            {"vk", static_cast<int>(info->vkCode)},
+            {"down", down},
+        };
+        g_channel->InvokeMethod("onKey",
+                                std::make_unique<flutter::EncodableValue>(args));
+      }
+    }
+  }
+  return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+}  // namespace
+
+void AttachChannel(void* channel) {
+  g_channel = reinterpret_cast<
+      flutter::MethodChannel<flutter::EncodableValue>*>(channel);
+}
+
+void SetKeyHookEnabled(bool enabled) {
+  if (enabled && g_hook == nullptr) {
+    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyProc,
+                               GetModuleHandleW(nullptr), 0);
+  } else if (!enabled && g_hook != nullptr) {
+    UnhookWindowsHookEx(g_hook);
+    g_hook = nullptr;
+    g_held.clear();
+  }
+}
+
+void RegisterPetHotkeys(HWND hwnd) {
+  RegisterHotKey(hwnd, 0, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_UP);
+  RegisterHotKey(hwnd, 1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_DOWN);
+  // Ctrl+Alt+T toggles click-through - the escape hatch when the window
+  // itself ignores every mouse click
+  RegisterHotKey(hwnd, 2, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'T');
+  // Ctrl+Alt+S opens the settings window
+  RegisterHotKey(hwnd, 3, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'S');
+}
+
+void OnHotkey(int id) {
+  if (g_channel == nullptr) return;
+  flutter::EncodableMap args{{"id", id}};
+  g_channel->InvokeMethod("onHotkey",
+                          std::make_unique<flutter::EncodableValue>(args));
+}
+
+// ---------------- per-region hit testing ----------------
+
+struct HitTestRegions {
+  bool full_passthrough = false;
+  bool has = false;
+  RECT pet{};     // window-local, physical px
+  RECT button{};  // window-local, physical px
+};
+HitTestRegions g_hit;
+
+void SetHitTestRegions(bool full_passthrough, const RECT& pet,
+                       const RECT& button) {
+  g_hit.full_passthrough = full_passthrough;
+  g_hit.pet = pet;
+  g_hit.button = button;
+  g_hit.has = true;
+}
+
+LRESULT HandleNCHitTest(HWND hwnd, LPARAM lparam) {
+  if (!g_hit.has) return HTCLIENT;
+  POINT pt;
+  pt.x = static_cast<short>(LOWORD(lparam));
+  pt.y = static_cast<short>(HIWORD(lparam));
+  ScreenToClient(hwnd, &pt);
+  // the toggle button stays clickable in every mode
+  if (PtInRect(&g_hit.button, pt)) return HTCLIENT;
+  if (g_hit.full_passthrough) return HTTRANSPARENT;
+  // the pet body is interactive; the transparent rest of the window lets
+  // clicks through to whatever the user is working on
+  if (PtInRect(&g_hit.pet, pt)) return HTCLIENT;
+  return HTTRANSPARENT;
+}
+
+// ---------------- Flutter child view subclassing ----------------
+
+WNDPROC g_childProc = nullptr;
+
+LRESULT CALLBACK ChildViewProc(HWND hwnd, UINT message, WPARAM wparam,
+                               LPARAM lparam) {
+  if (message == WM_NCHITTEST) {
+    return HandleNCHitTest(hwnd, lparam);
+  }
+  return CallWindowProc(g_childProc, hwnd, message, wparam, lparam);
+}
+
+void SubclassFlutterView(HWND hwnd) {
+  g_childProc = reinterpret_cast<WNDPROC>(
+      SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
+                        reinterpret_cast<LONG_PTR>(ChildViewProc)));
+}
+
+}  // namespace mypet

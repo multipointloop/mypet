@@ -1,0 +1,56 @@
+name: mypet
+description: "MyPet - cross-platform desktop pet (catgirl) for Windows & Android"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <5.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- Windows desktop shell ---
+  flutter_acrylic: ^1.1.4      # fully transparent window (DWM composition)
+  window_manager: ^0.4.3       # frameless / always-on-top / ignore-mouse-events
+  system_tray: ^2.0.3          # tray icon + menu
+  launch_at_startup: ^0.4.0    # auto start on login
+  win32: ^5.10.0               # GetCursorPos / work-area FFI
+  ffi: ^2.1.0
+
+  # --- shared ---
+  audioplayers: ^6.1.0         # click / land / key sounds
+  shared_preferences: ^2.3.0
+
+  # --- Android overlay ---
+  flutter_overlay_window: ^0.4.5
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.1
+
+# path_provider_foundation >=2.5 pulls in objective_c whose native-assets
+# build hook breaks Windows builds; 2.4.1 is the same MethodChannel impl
+# and only ever runs on iOS/macOS, so pinning it is safe here.
+dependency_overrides:
+  path_provider_foundation: 2.4.1
+
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  min_sdk_android: 24
+  windows:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    icon_size: 256
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/rig.json
+    - assets/parts/
+    - assets/sounds/
+    - assets/icon/

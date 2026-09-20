@@ -1,0 +1,152 @@
+{
+  "_comment": "MyPet rig - coordinates are pixels in the ORIGINAL 1.jpg canvas (992x1400, top-left origin). Refine with tools/coord_picker.html, then re-run tools/slice.py.",
+  "canvas": {
+    "w": 992,
+    "h": 1400
+  },
+  "layers": [
+    {
+      "name": "tail",
+      "crop": [
+        585,
+        995,
+        885,
+        1175
+      ],
+      "patched": false,
+      "z": 0
+    },
+    {
+      "name": "body",
+      "crop": [
+        198,
+        615,
+        872,
+        1400
+      ],
+      "patched": true,
+      "z": 2,
+      "eraseColorMask": {
+        "rect": [
+          580,
+          990,
+          890,
+          1180
+        ],
+        "pred": "pink",
+        "dilate": 2
+      }
+    },
+    {
+      "name": "head",
+      "crop": [
+        195,
+        322,
+        840,
+        640
+      ],
+      "patched": true,
+      "z": 1
+    },
+    {
+      "name": "eyeL",
+      "crop": [
+        432,
+        505,
+        492,
+        562
+      ],
+      "patched": false,
+      "z": 3
+    },
+    {
+      "name": "eyeR",
+      "crop": [
+        528,
+        512,
+        580,
+        570
+      ],
+      "patched": false,
+      "z": 4
+    }
+  ],
+  "eyePatches": [
+    [
+      424,
+      496,
+      502,
+      572
+    ],
+    [
+      520,
+      504,
+      590,
+      580
+    ]
+  ],
+  "anchors": {
+    "eyeL": [
+      466,
+      537
+    ],
+    "eyeR": [
+      556,
+      545
+    ],
+    "headPivot": [
+      512,
+      640
+    ],
+    "tailPivot": [
+      610,
+      1125
+    ],
+    "feet": [
+      500,
+      1399
+    ]
+  },
+  "regions": {
+    "head": [
+      195,
+      322,
+      840,
+      615
+    ],
+    "body": [
+      198,
+      615,
+      780,
+      1330
+    ],
+    "tail": [
+      620,
+      995,
+      885,
+      1175
+    ]
+  },
+  "params": {
+    "pupilMax": [
+      6,
+      3.5
+    ],
+    "headShift": [
+      3,
+      2
+    ],
+    "headRotDeg": 4,
+    "smoothing": 12,
+    "idleBlinkSecs": [
+      2,
+      6
+    ],
+    "dialogueIdleSecs": [
+      20,
+      45
+    ],
+    "gravity": 2000,
+    "bounce": 0.35
+  }
+}

@@ -68,11 +68,6 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     await _applyScale(cfg.petScale);
     _pushHitTestRegions();
 
-    // the independent settings window saves prefs in its own engine and
-    // pings us (configChanged -> reload) - re-apply geometry/regions here
-    Config.instance.addListener(_onConfigChangedExternally);
-    _lastAppliedScale = cfg.petScale;
-
     win.onScaleDelta = (delta) =>
         _applyScale((cfg.petScale + delta).clamp(0.35, 2.5));
     win.onToggleClickThrough = () => _toggleClickThrough();
@@ -117,25 +112,9 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     if (mounted) setState(() {});
   }
 
-  double _lastAppliedScale = 0;
-
-  /// Config listener on the pet engine: the settings window lives in a
-  /// separate engine and only writes prefs, so geometry must be re-applied
-  /// here whenever the saved values change.
-  void _onConfigChangedExternally() {
-    Trace.log('onConfigChangedExternally enter');
-    final cfg = Config.instance;
-    if ((cfg.petScale - _lastAppliedScale).abs() > 0.0001) {
-      _lastAppliedScale = cfg.petScale;
-      _applyScale(cfg.petScale); // includes applyToPlatform (pet engine!)
-    } else {
-      _pushHitTestRegions();
-      cfg.applyToPlatform(); // bongo/autostart/click-through, same engine
-    }
-    setState(() {});
-  }
-
   bool _panelOpen = false;
+  bool _applyingScale = false;
+  double? _pendingScale;
 
   void _toggleSettings() {
     if (_panelOpen) {
@@ -155,11 +134,29 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     setState(() => _panelOpen = false);
   }
 
+  /// 唯一的尺寸入口：先写配置，再做一次窗口重排。
+  /// 重入保护 + 末位优先：滑杆连续触发时同一时刻只有一次 resize 在跑，
+  /// 且以最后一个值为准（旧实现会重入并叠加 2-3 次 setSize/setPosition）。
   Future<void> _applyScale(double petScale) async {
-    Trace.log('applyScale enter $petScale');
+    Config.instance.setScale(petScale);
+    _pendingScale = petScale;
+    if (_applyingScale) return;
+    _applyingScale = true;
+    try {
+      while (_pendingScale != null) {
+        final target = _pendingScale!;
+        _pendingScale = null;
+        await _resizeNow(target);
+      }
+    } finally {
+      _applyingScale = false;
+    }
+  }
+
+  Future<void> _resizeNow(double petScale) async {
+    Trace.log('resizeNow enter $petScale');
     final r = rig;
     if (r == null) return;
-    Config.instance.setScale(petScale);
     final s = kBasePetWidth / r.canvasW * petScale;
     engine.scale = s;
     engine.windowW = r.canvasW * s + kSidePad * 2;
@@ -343,8 +340,6 @@ class _IdleBubbleTickerState extends State<_IdleBubbleTicker> {
     super.initState();
     Stream.periodic(const Duration(seconds: 1)).listen((_) {
       widget.engine.maybeIdleBubble();
-      // pick up settings changed in the independent settings window
-      Config.instance.syncIfChanged();
     });
   }
 

@@ -2,7 +2,9 @@
 /dev/
 
 # ---- 构建产物 / 交付物 ----
-/dist/
+/dist/*
+# 例外：安装器脚本是源文件，需要跟踪（父目录用 /dist/* 才允许反向豁免）
+!/dist/setup.iss
 /mypet/build/
 /mypet/.dart_tool/
 /mypet/windows/flutter/ephemeral/

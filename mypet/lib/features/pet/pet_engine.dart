@@ -10,7 +10,10 @@ import '../../core/trace.dart';
 import '../../core/rig_view.dart' show PetPose;
 import 'dialogue_lines.dart' show pickLine;
 
-enum PetRegion { head, body, tail, none }
+enum PetRegion { head, body, tail, legs, none }
+
+/// 裙子以下的"跳一跳"式折叠：蓄力 3s -> 弹回 1s（带轻微过冲）
+enum FoldPhase { idle, charging, springing }
 
 enum PetMood { normal, happy, sleepy }
 
@@ -145,6 +148,9 @@ class PetEngine with ChangeNotifier {
       if (_squashT <= 0) squash = 0;
     }
 
+    // -- 裙子以下的跳一跳折叠
+    advanceFold(d);
+
     // -- surprised eyes
     if (_exprT > 0) {
       _exprT -= d;
@@ -208,6 +214,7 @@ class PetEngine with ChangeNotifier {
       tailWag: tailWag,
       jumpY: jumpY,
       squash: squash,
+      fold: fold,
       breathe: math.sin(phase * 2 * math.pi / 3.2) * breathing,
       opacity: baseOpacity * (mood == PetMood.sleepy ? 0.96 : 1.0),
     );
@@ -254,6 +261,7 @@ class PetEngine with ChangeNotifier {
         best = switch (entry.key) {
           'head' => PetRegion.head,
           'tail' => PetRegion.tail,
+        'legs' => PetRegion.legs,
           'body' => PetRegion.body,
           _ => null,
         };
@@ -265,7 +273,7 @@ class PetEngine with ChangeNotifier {
   void react(PetRegion region) {
     switch (region) {
       case PetRegion.head:
-        AudioService.instance.play('click_head');
+        AudioService.instance.play('bounce');
         AudioService.instance.play('surprise'); // layered; silent if missing
         _jumpVel = 320; // hop!
         _exprT = 0.5; // wide eyes
@@ -285,10 +293,62 @@ class PetEngine with ChangeNotifier {
         if (Config.instance.dialogue && _rng.nextDouble() < 0.3) {
           showBubble(pickLine('tail', _lineRng));
         }
+      case PetRegion.legs:
+        startFold();
       case PetRegion.none:
         break;
     }
     notifyListeners();
+  }
+
+  // ---- 裙子以下：跳一跳式折叠 ----
+
+  FoldPhase foldPhase = FoldPhase.idle;
+  double _foldT = 0;
+  static const double foldChargeSecs = 3.0;
+  static const double foldSpringSecs = 1.0;
+
+  /// 折叠进度：蓄力 0->1，弹回 1->0（easeOutBack 过冲出负值 = 轻微拉伸）
+  double get fold {
+    switch (foldPhase) {
+      case FoldPhase.idle:
+        return 0;
+      case FoldPhase.charging:
+        final t = (_foldT / foldChargeSecs).clamp(0.0, 1.0);
+        return t * t * (3 - 2 * t);
+      case FoldPhase.springing:
+        final t = (_foldT / foldSpringSecs).clamp(0.0, 1.0);
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        final u = t - 1;
+        return 1 - (1 + c3 * u * u * u + c1 * u * u);
+    }
+  }
+
+  void startFold() {
+    if (foldPhase != FoldPhase.idle) return;
+    foldPhase = FoldPhase.charging;
+    _foldT = 0;
+    Trace.log('fold start');
+    AudioService.instance.play('charge');
+    notifyListeners();
+  }
+
+  /// 由 tick 驱动；也可在测试里直接喂 dt。
+  void advanceFold(double d) {
+    if (foldPhase == FoldPhase.idle) return;
+    _foldT += d;
+    if (foldPhase == FoldPhase.charging && _foldT >= foldChargeSecs) {
+      _foldT = 0;
+      foldPhase = FoldPhase.springing;
+      Trace.log('fold spring');
+      AudioService.instance.play('swoosh');
+    } else if (foldPhase == FoldPhase.springing &&
+        _foldT >= foldSpringSecs) {
+      _foldT = 0;
+      foldPhase = FoldPhase.idle;
+      Trace.log('fold done');
+    }
   }
 
   // ---- bongo cat ----

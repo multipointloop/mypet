@@ -14,6 +14,7 @@ RigData rig() => RigData.parse(jsonEncode({
         'head': [0, 0, 1000, 600],
         'body': [0, 600, 700, 1400],
         'tail': [700, 600, 1000, 1400],
+        'legs': [360, 1070, 620, 1400],
       },
     }));
 
@@ -55,5 +56,30 @@ void main() {
   test('打瞌睡时 pose 半闭眼', () {
     final e = PetEngine()..mood = PetMood.sleepy;
     expect(e.pose().blink, 0.55);
+  });
+
+  test('裙子以下命中 legs 区，且优先于 body', () {
+    final e = PetEngine()
+      ..rig = rig()
+      ..scale = 1.0;
+    expect(e.hitRegion(const Offset(500, 1200)), PetRegion.legs);
+    expect(e.hitRegion(const Offset(100, 1200)), PetRegion.body);
+  });
+
+  test('裙子以下点击：3s 蓄力 + 1s 弹回（带过冲）', () {
+    final e = PetEngine();
+    expect(e.fold, 0);
+    e.startFold();
+    expect(e.foldPhase, FoldPhase.charging);
+    e.advanceFold(1.5);
+    expect(e.fold, greaterThan(0.4));
+    expect(e.fold, lessThan(1.0));
+    e.advanceFold(1.5);
+    expect(e.foldPhase, FoldPhase.springing);
+    e.advanceFold(0.6);
+    expect(e.fold, lessThan(0.0));
+    e.advanceFold(0.5);
+    expect(e.fold, 0);
+    expect(e.foldPhase, FoldPhase.idle);
   });
 }

@@ -31,16 +31,28 @@ class AudioService {
     }
   }
 
-  static const _known = [
-    'click_head', 'click_body', 'click_tail', 'land', 'surprise', 'key', 'mew',
-  ];
+  /// 音效名 -> 资源文件（wav / mp3 混用；文件名保持 ASCII，避免中文路径问题）
+  static const Map<String, String> _files = {
+    'click_head': 'bounce.mp3',
+    'bounce': 'bounce.mp3',
+    'click_body': 'click_body.wav',
+    'click_tail': 'click_tail.wav',
+    'land': 'land.wav',
+    'surprise': 'surprise.wav',
+    'key': 'key.wav',
+    'mew': 'mew.wav',
+    'charge': 'charge.wav',
+    'swoosh': 'swoosh.wav',
+  };
+
+  static String _asset(String name) => _files[name] ?? '$name.wav';
 
   Future<void> preload() async {
-    for (final name in _known) {
+    for (final entry in _files.entries) {
       try {
-        await rootBundle.load('assets/sounds/$name.wav');
+        await rootBundle.load('assets/sounds/${entry.value}');
       } catch (_) {
-        _missing.add(name);
+        _missing.add(entry.key);
       }
     }
   }
@@ -56,7 +68,7 @@ class AudioService {
       if (!_primed.contains(player)) {
         await player.setReleaseMode(ReleaseMode.stop);
         await player.setVolume(_volume);
-        await player.setSource(AssetSource('sounds/$name.wav'));
+        await player.setSource(AssetSource('sounds/${_asset(name)}'));
         _primed.add(player);
       }
       await player.seek(Duration.zero);

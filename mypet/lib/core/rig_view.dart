@@ -14,6 +14,7 @@ class PetPose {
     this.tailWag = 0, // radians, damped oscillation
     this.jumpY = 0, // rig px, positive = up
     this.squash = 0, // 0 none .. 1 full squash (landing)
+    this.fold = 0, // 裙子以下跳一跳折叠；负值 = 弹回时的轻微拉伸
     this.breathe = 0, // -1..1 breathing phase
     this.opacity = 1.0,
   });
@@ -25,6 +26,7 @@ class PetPose {
   final double tailWag;
   final double jumpY;
   final double squash;
+  final double fold;
   final double breathe;
   final double opacity;
 }
@@ -62,8 +64,12 @@ class PetRigView extends StatelessWidget {
     // so every layer (head included) moves in lockstep - the neck seam can
     // never open. Gaze-driven motion stays per-layer inside.
     final breathe = 1 + pose.breathe * 0.015; // ±1.5% height
-    final squashY = (1 - pose.squash * 0.12) * breathe;
-    final squashX = (1 + pose.squash * 0.10) / breathe;
+    // squash = 点下半身的短促挤压；fold = 裙子以下的蓄力折叠。
+    // fold 幅度（17%/14%）比 squash 稍大但不过度；负值即 Q 弹过冲。
+    final squashY =
+        (1 - pose.squash * 0.12) * (1 - pose.fold * 0.17) * breathe;
+    final squashX =
+        (1 + pose.squash * 0.10) * (1 + pose.fold * 0.14) / breathe;
 
     final children = <Widget>[];
     final headPivot = rig.anchor('headPivot') ?? const Offset(512, 640);

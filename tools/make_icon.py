@@ -11,7 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "mypet" / "assets" / "parts" / "pet_full.png"
+SRC = ROOT / "source_assets" / "pet_full.png"
 OUT = ROOT / "mypet" / "assets" / "icon"
 # head bounding box in canvas coords (see rig.json layers/head)
 HEAD_CROP = (385, 322, 692, 648)

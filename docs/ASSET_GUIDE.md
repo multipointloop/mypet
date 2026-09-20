@@ -12,13 +12,16 @@
 cd "E:\desktop pet\dev"
 call env.bat
 cd ..
-python tools\cutout.py      :: 1.jpg → 抠图 pet_full.png（保持 992×1400 画布）
+python tools\cutout.py      :: source_assets\1.jpg → source_assets\pet_full.png（保持 992×1400 画布）
 python tools\slice.py       :: 按 rig.json 切出 5 图层 + 眼底修补 + 尾巴擦除
 python tools\make_icon.py   :: 头部 → icon.png / tray.ico
 python tools\gen_sounds.py  :: 合成占位音效（可跳过）
 ```
 
 图层清单（坐标 = 原图画布像素，左上原点）：
+
+> `source_assets\` 存放原始素材与抠图中间件（`1.jpg` / `pet_full.png` / `pet_preview.jpg`），
+> **不参与打包**：pubspec.yaml 只打包 `assets/parts/` 下的 5 个图层、音效与图标。
 
 | 图层 | 文件 | 裁剪框 | 说明 |
 |---|---|---|---|
@@ -33,7 +36,7 @@ python tools\gen_sounds.py  :: 合成占位音效（可跳过）
 ## 二、coord_picker.html：浏览器里微调坐标（零依赖）
 
 1. 双击打开 `tools/coord_picker.html`（Chrome/Edge 均可）；
-2. 点「加载 ../1.jpg」或「加载抠图结果」（两者同坐标系）；
+2. 点「加载 ../source_assets/1.jpg」或「加载抠图结果」（两者同坐标系）；
 3. 右侧面板选中一个目标（如 `layer:head`）→ 模式切到"矩形"→ 在图上拖拽画框；
 4. 锚点模式下点击放置 `eyeL/eyeR`（瞳孔中心）、`headPivot`（脖颈）、`tailPivot`（尾根）、`feet`；
 5. 鼠标悬停有 8× 放大镜实时显示原始像素坐标；
@@ -45,7 +48,7 @@ python tools\gen_sounds.py  :: 合成占位音效（可跳过）
 
 自动抠图在发丝缝隙处有少量背景残留（右耳后、马尾间隙）。精修步骤：
 
-1. **抠图**：PS 打开 `1.jpg` → `选择主体`（或快速选择+边缘细化笔刷）→
+1. **抠图**：PS 打开 `source_assets/1.jpg` → `选择主体`（或快速选择+边缘细化笔刷）→
    输出为**图层蒙版**；检查发丝边缘，用「选择并遮住」的净化颜色去除白边。
 2. **图层拆分**（保持 992×1400 画布不动，**重要**）：
    - 复制人物层 5 份，分别命名 tail / body / head / eyeL / eyeR；

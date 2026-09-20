@@ -1,9 +1,9 @@
 # MyPet 🐾 猫娘桌宠
 
 跨平台桌面宠物应用：**Windows (.exe) + Android (.apk)** 单代码库（Flutter）。
-基于一张静态立绘（`1.jpg`），通过自动抠图 + 分层 + 代码驱动 Transform 实现全部动效。
+基于一张静态立绘（`source_assets/1.jpg`），通过自动抠图 + 分层 + 代码驱动 Transform 实现全部动效。
 
-![pet](mypet/assets/parts/pet_preview.jpg)
+![pet](source_assets/pet_preview.jpg)
 
 ## 功能
 

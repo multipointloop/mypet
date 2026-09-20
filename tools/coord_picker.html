@@ -42,8 +42,8 @@
   <h1>MyPet 坐标取点工具 <span class="badge" id="imgInfo">未加载图片</span></h1>
   <div class="row">
     <button onclick="fileInput.click()">打开图片…</button>
-    <button onclick="tryLoad('../1.jpg')">加载 ../1.jpg</button>
-    <button onclick="tryLoad('../mypet/assets/parts/pet_full.png')">加载抠图结果</button>
+    <button onclick="tryLoad('../source_assets/1.jpg')">加载 ../source_assets/1.jpg</button>
+    <button onclick="tryLoad('../source_assets/pet_full.png')">加载抠图结果</button>
     <input type="file" id="fileInput" accept="image/*" style="display:none">
     <span class="hint">画布坐标 = 原图像素坐标（左上角为原点），与 rig.json 完全一致</span>
   </div>
@@ -79,7 +79,7 @@
   <input type="file" id="rigInput" accept=".json" style="display:none">
   <label class="hint">导出仅包含几何信息；若导入已有 rig.json，params 等字段会原样保留。</label>
   <textarea id="out" spellcheck="false"></textarea>
-  <p class="hint">流程：加载 1.jpg → 矩形模式画出 tail/body/head/eyeL/eyeR 五个图层裁剪框
+  <p class="hint">流程：加载 source_assets/1.jpg → 矩形模式画出 tail/body/head/eyeL/eyeR 五个图层裁剪框
    和 patchL/patchR（稍大于眼睛、用于盖住原眼睛）→ 锚点模式点出 eyeL/eyeR（瞳孔中心）、
    headPivot（脖颈）、tailPivot（尾根）、feet（脚底中心）→ region:head/body/tail
   （点击命中区）→ 生成 JSON 粘贴回 mypet/assets/rig.json。</p>

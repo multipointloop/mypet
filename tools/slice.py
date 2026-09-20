@@ -85,7 +85,7 @@ def erase_color_mask(piece: np.ndarray, rect: list[int], pred: str,
 
 def main() -> int:
     rig = json.loads((ASSETS / "rig.json").read_text(encoding="utf-8"))
-    src = Image.open(ASSETS / "parts" / "pet_full.png").convert("RGBA")
+    src = Image.open(ROOT / "source_assets" / "pet_full.png").convert("RGBA")
     cw, ch = rig["canvas"]["w"], rig["canvas"]["h"]
     if src.size != (cw, ch):
         sys.exit(f"[slice] canvas mismatch: pet_full {src.size} != rig {cw}x{ch}")

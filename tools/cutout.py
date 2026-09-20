@@ -1,7 +1,7 @@
 """MyPet asset pipeline - step 1: cut the character out of 1.jpg.
 
 Input : ../1.jpg                (original photo-background artwork)
-Output: ../mypet/assets/parts/pet_full.png   (transparent RGBA, SAME canvas
+Output: ../source_assets/pet_full.png        (transparent RGBA, SAME canvas
         size as the source so every rig.json coordinate equals a source pixel)
 
 Keep-canvas rule: we intentionally do NOT trim the empty border - rig.json
@@ -20,8 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main() -> int:
-    src = ROOT / "1.jpg"
-    out_dir = ROOT / "mypet" / "assets" / "parts"
+    src = ROOT / "source_assets" / "1.jpg"
+    out_dir = ROOT / "source_assets"
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "pet_full.png"
 

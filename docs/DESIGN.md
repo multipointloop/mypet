@@ -1,7 +1,7 @@
 # MyPet 猫娘桌宠 — 跨平台技术方案文档
 
 > 单一代码库同时产出 Windows `.exe` 与 Android `.apk` 的桌宠应用。
-> 素材：单张静态立绘（`1.jpg`，992×1400）→ 自动抠图 → 分层 → 代码驱动动效。
+> 素材：单张静态立绘（`source_assets/1.jpg`，992×1400）→ 自动抠图 → 分层 → 代码驱动动效。
 
 ---
 
@@ -54,9 +54,9 @@
 
 ### 2.1 自动抠图（tools/cutout.py）
 
-`1.jpg`（带火车站实景背景）→ `rembg`（u2net 模型，onnxruntime CPU）→
-`mypet/assets/parts/pet_full.png`（**保持 992×1400 原画布**，保证 rig 坐标与原图一致），
-并输出棋盘格 QA 预览 `pet_preview.jpg`。实测 alpha 覆盖率 28.3%。
+`source_assets/1.jpg`（带火车站实景背景）→ `rembg`（u2net 模型，onnxruntime CPU）→
+`source_assets/pet_full.png`（**保持 992×1400 原画布**，保证 rig 坐标与原图一致），
+并输出棋盘格 QA 预览 `source_assets/pet_preview.jpg`。实测 alpha 覆盖率 28.3%。
 
 ### 2.2 图层切分（tools/slice.py + rig.json）
 
@@ -143,7 +143,7 @@ gazeTarget = |v|>1 ? v/|v| : v // 单位圆盘截断：方向 + 距离强度
 
 ```
 E:\desktop pet\
-├─ 1.jpg                    # 原始素材
+├─ source_assets\           # 原始素材 1.jpg + 抠图结果 pet_full.png / pet_preview.jpg（不打包）
 ├─ docs\                    # DESIGN.md(本文) / ASSET_GUIDE.md / BUILD.md
 ├─ tools\                   # Python 3.11 素材管线（全部本地化，可重复执行）
 │  ├─ requirements.txt      # rembg/onnxruntime/pillow 固定兼容区间
@@ -163,7 +163,7 @@ E:\desktop pet\
    ├─ pubspec.yaml
    ├─ assets\
    │  ├─ rig.json           # ★ 骨架配置：图层/锚点/命中区/物理参数
-   │  ├─ parts\             # pet_full + tail/body/head/eyeL/eyeR.png
+   │  ├─ parts\             # tail/body/head/eyeL/eyeR.png（5 个图层，参与打包）
    │  ├─ sounds\            # 7 个占位 WAV（可直接替换同名 mp3）
    │  └─ icon\              # icon.png / tray.ico
    ├─ lib\

@@ -13,6 +13,9 @@
 /mypet/.idea/
 /mypet/*.iml
 
+# ---- 用户原始素材（压缩包 + 解压件，成品已 ASCII 化进 assets/sounds）----
+/sounds/
+
 # ---- 日志 / 临时 / 用户测试录像 ----
 *.mp4
 /*.png

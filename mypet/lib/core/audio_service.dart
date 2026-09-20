@@ -1,18 +1,35 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 
-/// Silent-fail audio wrapper: a missing / broken / unloaded sound file must
-/// never crash the pet or pop a dialog - it is simply skipped. Users can drop
-/// real mp3/wav files into assets/sounds/ later and rebuild (or hot-replace
-/// in debug) without touching any code.
+/// 静默容错音频 + 声部池（voice pool）。
+///
+/// * 每个音效预建若干 [AudioPlayer] 轮转使用：高频连击时不会互相打断/丢音；
+/// * 每个声部只在首次播放时 setSource，之后走 seek(0)+resume()，
+///   避免每次敲键都重新读资源（这是极限连击掉帧的主因）；
+/// * 任何失败静默降级，缺失音效拉黑不再重试。
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
 
-  final Map<String, AudioPlayer> _players = {};
+  static const int _voices = 4;
+
+  final Map<String, List<AudioPlayer>> _pools = {};
+  final Map<String, int> _next = {};
+  final Set<AudioPlayer> _primed = {};
   final Set<String> _missing = {};
+
   bool enabled = true;
-  double volume = 0.8;
+
+  double _volume = 0.8;
+  double get volume => _volume;
+  set volume(double v) {
+    _volume = v;
+    for (final pool in _pools.values) {
+      for (final p in pool) {
+        p.setVolume(v);
+      }
+    }
+  }
 
   static const _known = [
     'click_head', 'click_body', 'click_tail', 'land', 'surprise', 'key', 'mew',
@@ -31,13 +48,20 @@ class AudioService {
   Future<void> play(String name) async {
     if (!enabled || _missing.contains(name)) return;
     try {
-      final player = _players.putIfAbsent(name, AudioPlayer.new);
-      await player.setVolume(volume);
-      // stop() first so repeated taps retrigger from the start
-      await player.stop();
-      await player.play(AssetSource('sounds/$name.wav'));
-    } catch (e) {
-      // missing/corrupt asset or device without audio - stay silent
+      final pool = _pools.putIfAbsent(
+          name, () => List<AudioPlayer>.generate(_voices, (_) => AudioPlayer()));
+      final i = (_next[name] ?? 0) % _voices;
+      _next[name] = i + 1;
+      final player = pool[i];
+      if (!_primed.contains(player)) {
+        await player.setReleaseMode(ReleaseMode.stop);
+        await player.setVolume(_volume);
+        await player.setSource(AssetSource('sounds/$name.wav'));
+        _primed.add(player);
+      }
+      await player.seek(Duration.zero);
+      await player.resume();
+    } catch (_) {
       _missing.add(name);
     }
   }

@@ -132,14 +132,20 @@ class WindowsWindowService {
 
   Rect? _petRect;   // window-local logical px
   Rect? _buttonRect;
+  Rect? _bandRect;
+  bool _bandOn = false;
 
   Future<void> setHitTestRegions({
     required Rect pet,
     required Rect button,
+    Rect? band,
+    bool bandOn = false,
     bool fullPassthrough = false,
   }) async {
     _petRect = pet;
     _buttonRect = button;
+    _bandRect = band;
+    _bandOn = bandOn;
     if (_panelMode) return; // 面板期间保持整窗可交互
     await _pushHitTest(fullPassthrough: fullPassthrough);
   }
@@ -149,6 +155,7 @@ class WindowsWindowService {
     final button = _buttonRect;
     if (pet == null || button == null) return;
     final dpr = _engine?.devicePixelRatio ?? 1;
+    final band = _bandRect ?? Rect.zero;
     await NativeChannel.instance.setHitTest(
       full: fullPassthrough,
       pet: [
@@ -158,6 +165,10 @@ class WindowsWindowService {
         button.left * dpr, button.top * dpr,
         button.right * dpr, button.bottom * dpr,
       ],
+      band: [
+        band.left * dpr, band.top * dpr, band.right * dpr, band.bottom * dpr,
+      ],
+      bandOn: _bandOn && !fullPassthrough,
     );
   }
 
@@ -204,6 +215,8 @@ class WindowsWindowService {
       full: false,
       pet: [0, 0, panelSize.width * dpr, panelSize.height * dpr],
       button: const [0, 0, 0, 0],
+      band: const [0, 0, 0, 0],
+      bandOn: false,
     );
 
     await windowManager.setOpacity(1.0);

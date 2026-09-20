@@ -21,6 +21,12 @@ const double kBasePetWidth = 260;
 const double kBubbleSpace = 120;
 const double kSidePad = 10;
 
+/// 穿透开关（小眼睛）按钮：锚在头部图层右上角外侧，随缩放移动。
+/// 间距按 5mm 估算（96dpi 下约 19 逻辑像素），用下面两个常量微调。
+const double kButtonSize = 30;
+const double kButtonGapX = 19;
+const double kButtonGapY = 19;
+
 /// Windows: transparent always-on-top pet window.
 class WindowsPetHome extends StatefulWidget {
   const WindowsPetHome({super.key});
@@ -65,11 +71,12 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     // drag/fall move the window through the engine's once-per-tick bridge
     engine.onWindowMoveRequested =
         (p) => WindowsWindowService.instance.moveWindow(p);
+    await _refreshMaxScale(); // 先算本机可容纳的最大尺寸，再应用
     await _applyScale(cfg.petScale);
     _pushHitTestRegions();
 
     win.onScaleDelta = (delta) =>
-        _applyScale((cfg.petScale + delta).clamp(0.35, 2.5));
+        _applyScale((cfg.petScale + delta).clamp(0.35, _maxPetScale));
     win.onToggleClickThrough = () => _toggleClickThrough();
     win.onToggleBongo = () {
       cfg.setBongoHook(!cfg.bongoHook);
@@ -89,9 +96,9 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     };
     NativeChannel.instance.onHotkey = (id) {
       if (id == 0) {
-        _applyScale((cfg.petScale + 0.1).clamp(0.35, 2.5));
+        _applyScale((cfg.petScale + 0.1).clamp(0.35, _maxPetScale));
       } else if (id == 1) {
-        _applyScale((cfg.petScale - 0.1).clamp(0.35, 2.5));
+        _applyScale((cfg.petScale - 0.1).clamp(0.35, _maxPetScale));
       } else if (id == 3) {
         _toggleSettings();
       } else if (id == 2) {
@@ -117,6 +124,19 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
   double? _pendingScale;
 
   double _panelOpenedScale = 1.0;
+
+  /// 本机工作区能容纳的最大 petScale（窗口高 = canvasH*scale + 气泡区）。
+  /// 超出后窗口必然高过屏幕，宠物腿部会被切掉，因此把它作为滑杆上限。
+  double _maxPetScale = 2.5;
+  Future<void> _refreshMaxScale() async {
+    final r = rig;
+    if (r == null) return;
+    final area = await WindowsWindowService.instance.workAreaRectLogical();
+    final perUnit = r.canvasH * (kBasePetWidth / r.canvasW);
+    final fit = (area.height - kBubbleSpace - 8) / perUnit;
+    final clamped = fit.clamp(0.35, 2.5).toDouble();
+    if (mounted) setState(() => _maxPetScale = clamped);
+  }
 
   void _toggleSettings() {
     if (_panelOpen) {
@@ -156,9 +176,10 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
 
   /// 面板内拖尺寸滑杆：只更新配置与右侧实时预览，绝不缩放窗口。
   void _setScaleFromPanel(double v) {
-    Config.instance.setScale(v);
+    final wanted = v.clamp(0.35, _maxPetScale).toDouble();
+    Config.instance.setScale(wanted);
     final r = rig;
-    if (r != null) engine.scale = kBasePetWidth / r.canvasW * v;
+    if (r != null) engine.scale = kBasePetWidth / r.canvasW * wanted;
     setState(() {});
   }
 
@@ -166,8 +187,9 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
   /// 重入保护 + 末位优先：滑杆连续触发时同一时刻只有一次 resize 在跑，
   /// 且以最后一个值为准（旧实现会重入并叠加 2-3 次 setSize/setPosition）。
   Future<void> _applyScale(double petScale) async {
-    Config.instance.setScale(petScale);
-    _pendingScale = petScale;
+    final wanted = petScale.clamp(0.35, _maxPetScale).toDouble();
+    Config.instance.setScale(wanted);
+    _pendingScale = wanted;
     if (_applyingScale) return;
     _applyingScale = true;
     try {
@@ -211,12 +233,55 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     final petH = r.canvasH * engine.scale;
     final winW = petW + kSidePad * 2;
     final petRect = Rect.fromLTWH(kSidePad, kBubbleSpace, petW, petH);
-    // button widget sits at Positioned(right:2, top:2), 30x30
+    final bandOn = engine.bubbleText != null;
     WindowsWindowService.instance.setHitTestRegions(
       pet: petRect,
-      button: Rect.fromLTWH(winW - 32, 2, 30, 30),
+      button: _buttonRect(petW, petH),
+      band: bandOn ? Rect.fromLTWH(0, 0, winW, kBubbleSpace) : Rect.zero,
+      bandOn: bandOn,
       fullPassthrough: Config.instance.clickThrough,
     );
+  }
+
+  bool _bubbleShown = false;
+
+  /// 气泡出现/消失时补推一次窗口区域：气泡带不在区域内会被 SetWindowRgn 裁掉。
+  void _syncBubbleBand(bool visible) {
+    if (visible == _bubbleShown) return;
+    _bubbleShown = visible;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !WindowsWindowService.instance.panelMode) {
+        _pushHitTestRegions();
+      }
+    });
+  }
+
+  /// 小眼睛按钮在窗口内的位置：头部图层右上角外侧 kButtonGap 像素处，
+  /// 再夹回窗口内（小尺寸时头部右缘可能超出窗口宽度）。
+  Rect _buttonRect(double petW, double petH) {
+    final winW = petW + kSidePad * 2;
+    final winH = petH + kBubbleSpace;
+    final r = rig;
+    final s = engine.scale;
+    double right;
+    double top;
+    if (r == null) {
+      right = winW;
+      top = kBubbleSpace;
+    } else {
+      final head = r.layers.firstWhere((l) => l.name == 'head',
+          orElse: () => r.layers.isEmpty
+              ? const RigLayer(name: 'head', crop: Rect.zero, zOrder: 0)
+              : r.layers.last);
+      right = kSidePad + head.crop.right * s;
+      top = kBubbleSpace + head.crop.top * s;
+    }
+    final left =
+        (right + kButtonGapX).clamp(2.0, winW - kButtonSize - 2).toDouble();
+    final t = (top - kButtonSize - kButtonGapY)
+        .clamp(2.0, winH - kButtonSize - 2)
+        .toDouble();
+    return Rect.fromLTWH(left, t, kButtonSize, kButtonSize);
   }
 
   /// Native HTCAPTION drag loop: the compositor moves the window in
@@ -273,6 +338,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
                 onClose: _closeSettings,
                 onScaleChanged: _setScaleFromPanel,
                 onApplied: _applyConfigChange,
+                maxScale: _maxPetScale,
               )
             : KeyedSubtree(
                 key: const ValueKey('pet'),
@@ -286,7 +352,9 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
   }
 
   Widget _petStack(RigData r, double petW, double petH) {
+    final buttonRect = _buttonRect(petW, petH);
     final bubbleText = engine.bubbleText;
+    _syncBubbleBand(bubbleText != null);
     final shown = bubbleText == null
         ? ''
         : bubbleText.substring(
@@ -326,12 +394,10 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
               ),
             ),
           ),
-          // click-through toggle (top-right corner of the window):
-          // it stays clickable even in passthrough mode (C++ hit-test
-          // keeps this rect alive)
+          // 穿透开关（小眼睛）：紧贴桌宠头部右上角；穿透态下 C++ 仍保留该矩形可点
           Positioned(
-            right: 2,
-            top: 2,
+            left: buttonRect.left,
+            top: buttonRect.top,
             child: _ThroughButton(onToggle: _toggleClickThrough),
           ),
           if (bubbleText != null)

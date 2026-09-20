@@ -113,17 +113,57 @@ void OnHotkey(int id) {
 struct HitTestRegions {
   bool full_passthrough = false;
   bool has = false;
-  RECT pet{};     // window-local, physical px
-  RECT button{};  // window-local, physical px
+  RECT pet{};    // window-local, physical px
+  RECT button{}; // window-local, physical px
+  RECT band{};   // speech-bubble strip (may be empty)
+  bool band_on = false;
 };
 HitTestRegions g_hit;
 
+HWND g_main_window = nullptr;
+
+// Shape the window so that, outside these rects, it does not exist for the
+// input system (works across processes, unlike HTTRANSPARENT).
+void ApplyWindowRegion() {
+  if (g_main_window == nullptr || !g_hit.has) return;
+  HRGN rgn = CreateRectRgn(0, 0, 0, 0);
+  if (rgn == nullptr) return;
+  if (g_hit.full_passthrough) {
+    HRGN button = CreateRectRgn(g_hit.button.left, g_hit.button.top,
+                                g_hit.button.right, g_hit.button.bottom);
+    CombineRgn(rgn, button, nullptr, RGN_COPY);
+    DeleteObject(button);
+  } else {
+    HRGN pet = CreateRectRgn(g_hit.pet.left, g_hit.pet.top, g_hit.pet.right,
+                             g_hit.pet.bottom);
+    CombineRgn(rgn, rgn, pet, RGN_OR);
+    DeleteObject(pet);
+    HRGN button = CreateRectRgn(g_hit.button.left, g_hit.button.top,
+                                g_hit.button.right, g_hit.button.bottom);
+    CombineRgn(rgn, rgn, button, RGN_OR);
+    DeleteObject(button);
+    if (g_hit.band_on) {
+      HRGN band = CreateRectRgn(g_hit.band.left, g_hit.band.top,
+                                g_hit.band.right, g_hit.band.bottom);
+      CombineRgn(rgn, rgn, band, RGN_OR);
+      DeleteObject(band);
+    }
+  }
+  // The window owns the region afterwards; no DeleteObject here.
+  SetWindowRgn(g_main_window, rgn, TRUE);
+}
+
+void AttachMainWindow(HWND hwnd) { g_main_window = hwnd; }
+
 void SetHitTestRegions(bool full_passthrough, const RECT& pet,
-                       const RECT& button) {
+                       const RECT& button, const RECT& band, bool band_on) {
   g_hit.full_passthrough = full_passthrough;
   g_hit.pet = pet;
   g_hit.button = button;
+  g_hit.band = band;
+  g_hit.band_on = band_on;
   g_hit.has = true;
+  ApplyWindowRegion();
 }
 
 LRESULT HandleNCHitTest(HWND hwnd, LPARAM lparam) {

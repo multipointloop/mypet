@@ -20,6 +20,7 @@ class SettingsPanel extends StatelessWidget {
     required this.onClose,
     required this.onScaleChanged,
     required this.onApplied,
+    required this.maxScale,
   });
 
   final RigData rig;
@@ -30,6 +31,9 @@ class SettingsPanel extends StatelessWidget {
   /// 任何改动落库后回调一次：把设置即时下推平台（音效/音量/Bongo/自启…）。
   /// 穿透与窗口几何由 WindowsWindowService 在面板态闸门内延后处理。
   final VoidCallback onApplied;
+
+  /// 本机可容纳的最大尺寸（由工作区高度换算，避免放大后腿部被切）。
+  final double maxScale;
 
   static const double _kPreviewZoom = 0.30;
 
@@ -52,7 +56,7 @@ class SettingsPanel extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(14, 2, 8, 18),
                       children: [
                         _section('外观', [
-                          _slider('尺寸', cfg.petScale, 0.35, 2.5, onScaleChanged),
+                          _slider('尺寸', cfg.petScale, 0.35, maxScale, onScaleChanged),
                           _slider('常态透明度', cfg.normalOpacity, 0.3, 1,
                               cfg.setNormalOpacity),
                           _slider('穿透时透明度', cfg.clickThroughOpacity, 0.1, 1,

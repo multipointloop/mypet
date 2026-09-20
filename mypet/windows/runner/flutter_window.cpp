@@ -64,6 +64,8 @@ bool FlutterWindow::OnCreate() {
             bool full = false;
             double pet[4] = {0, 0, 0, 0};
             double button[4] = {0, 0, 0, 0};
+            double band[4] = {0, 0, 0, 0};
+            bool band_on = false;
             auto full_it = map->find(flutter::EncodableValue("full"));
             if (full_it != map->end()) {
               if (const auto* b = std::get_if<bool>(&full_it->second)) {
@@ -86,13 +88,23 @@ bool FlutterWindow::OnCreate() {
             };
             read_rect("pet", pet);
             read_rect("button", button);
+            read_rect("band", band);
+            auto band_it = map->find(flutter::EncodableValue("bandOn"));
+            if (band_it != map->end()) {
+              if (const auto* b = std::get_if<bool>(&band_it->second)) {
+                band_on = *b;
+              }
+            }
             mypet::SetHitTestRegions(
                 full,
                 RECT{static_cast<LONG>(pet[0]), static_cast<LONG>(pet[1]),
                      static_cast<LONG>(pet[2]), static_cast<LONG>(pet[3])},
                 RECT{static_cast<LONG>(button[0]), static_cast<LONG>(button[1]),
                      static_cast<LONG>(button[2]),
-                     static_cast<LONG>(button[3])});
+                     static_cast<LONG>(button[3])},
+                RECT{static_cast<LONG>(band[0]), static_cast<LONG>(band[1]),
+                     static_cast<LONG>(band[2]), static_cast<LONG>(band[3])},
+                band_on);
           }
           result->Success();
         } else {
@@ -100,6 +112,7 @@ bool FlutterWindow::OnCreate() {
         }
       });
   mypet::AttachChannel(channel_.get());
+  mypet::AttachMainWindow(GetHandle());
   mypet::RegisterPetHotkeys(GetHandle());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

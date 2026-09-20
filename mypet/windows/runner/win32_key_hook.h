@@ -22,17 +22,27 @@ void RegisterPetHotkeys(HWND hwnd);
 // Call from the window message handler on WM_HOTKEY.
 void OnHotkey(int id);
 
-// ---- per-region hit testing (replaces WS_EX_TRANSPARENT) -----------------
+// ---- per-region hit testing + window region -----------------------------
+//
+// WM_NCHITTEST / HTTRANSPARENT only forwards clicks to windows IN THE SAME
+// THREAD, so it can never let clicks reach the taskbar or other apps. The
+// window is therefore also SHAPED with SetWindowRgn: outside the region the
+// window does not exist for the input system, which works across processes.
 //
 // Dart pushes window-local PHYSICAL pixel rects:
 //   pet    - the drawn pet body (clickable & draggable)
 //   button - the click-through toggle button (ALWAYS clickable, even in
 //            full-passthrough mode, so the user can never get stuck)
-// Everything else returns HTTRANSPARENT so clicks fall through to whatever
-// is behind the transparent window.
+//   band   - the speech-bubble strip above the pet; kept inside the region so
+//            a bubble is never clipped (band_on = a bubble is visible)
+//
+// Region rules: full_passthrough -> button only; else pet + button (+ band).
 void SetHitTestRegions(bool full_passthrough, const RECT& pet,
-                       const RECT& button);
+                       const RECT& button, const RECT& band, bool band_on);
 LRESULT HandleNCHitTest(HWND hwnd, LPARAM lparam);
+
+// Top-level window handle - the target of SetWindowRgn.
+void AttachMainWindow(HWND hwnd);
 
 // The Flutter view lives in a CHILD window that covers the whole client
 // area and is hit-tested BEFORE the parent - the parent-level WM_NCHITTEST

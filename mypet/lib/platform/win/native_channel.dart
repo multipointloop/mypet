@@ -49,12 +49,16 @@ class NativeChannel {
     required bool full,
     required List<double> pet,
     required List<double> button,
+    required List<double> band,
+    required bool bandOn,
   }) async {
     try {
       await _ch.invokeMethod('setHitTest', {
         'full': full,
         'pet': pet,
         'button': button,
+        'band': band,
+        'bandOn': bandOn,
       });
     } on MissingPluginException {
       // non-windows runner (tests); ignore

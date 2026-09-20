@@ -106,8 +106,8 @@ class PetRigView extends StatelessWidget {
           final sharedY = (eyeAnchor.dy + other.dy) / 2;
           final ax = (eyeAnchor.dx - layer.crop.left) * scale;
           final ay = (sharedY - layer.crop.top) * scale;
-          final lineW = w * 0.86;
-          final lineH = math.max(2.0 * scale, h * 0.10);
+          final lineW = w * 0.78;
+          final lineH = math.max(1.4 * scale, h * 0.075);
           img = Stack(
             clipBehavior: Clip.none,
             children: [
@@ -121,7 +121,7 @@ class PetRigView extends StatelessWidget {
                     width: lineW,
                     height: lineH,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4A3439),
+                      color: const Color(0xFF7A5A63),
                       borderRadius: BorderRadius.circular(lineH),
                     ),
                   ),

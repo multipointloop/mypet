@@ -129,14 +129,14 @@
   },
   "params": {
     "pupilMax": [
-      6,
-      3.5
+      4,
+      1.2
     ],
     "headShift": [
       3,
       2
     ],
-    "headRotDeg": 4,
+    "headRotDeg": 2,
     "smoothing": 12,
     "idleBlinkSecs": [
       2,

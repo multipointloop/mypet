@@ -274,6 +274,16 @@ class WindowsWindowService {
     await NativeChannel.instance.setKeyHook(enabled);
   }
 
+  /// 重新声明置顶：Alt+Tab / 有其它置顶窗口抢层时，先摘再置可以把我们抬回最上。
+  Future<void> reassertTopMost() async {
+    try {
+      await windowManager.setAlwaysOnTop(false);
+      await windowManager.setAlwaysOnTop(true);
+    } catch (_) {
+      // 置顶是增强项，失败不影响主流程
+    }
+  }
+
   bool? _autostartApplied;
 
   Future<void> setAutostart(bool enabled) async {

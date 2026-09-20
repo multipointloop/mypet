@@ -35,7 +35,7 @@ class WindowsPetHome extends StatefulWidget {
   State<WindowsPetHome> createState() => _WindowsPetHomeState();
 }
 
-class _WindowsPetHomeState extends State<WindowsPetHome> {
+class _WindowsPetHomeState extends State<WindowsPetHome> with WindowListener {
   final PetEngine engine = PetEngine();
   final CursorPoller poller = CursorPoller();
   RigData? rig;
@@ -109,6 +109,11 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     };
     await NativeChannel.instance.start();
 
+    windowManager.addListener(this);
+    _topGuard = Timer.periodic(const Duration(seconds: 10), (_) {
+      WindowsWindowService.instance.reassertTopMost();
+    });
+
     poller.onCursor = (logicalPos) {
       final eye = _eyeAnchorScreen();
       if (eye != null) engine.feedPointer(logicalPos, eye, 360 * engine.scale);
@@ -122,6 +127,25 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
   bool _panelOpen = false;
   bool _applyingScale = false;
   double? _pendingScale;
+
+  Timer? _topGuard;
+
+  @override
+  void onWindowFocus() => _reassert('focus');
+
+  @override
+  void onWindowBlur() => _reassert('blur');
+
+  @override
+  void onWindowRestore() => _reassert('restore');
+
+  /// Alt+Tab / 唤醒后：其它置顶窗口可能把我们顶下去，系统也可能重置窗口区域。
+  /// 这里重新声明置顶并补推一次区域（幂等，只有两次系统调用）。
+  void _reassert(String why) {
+    Trace.log('reassert topMost ($why)');
+    WindowsWindowService.instance.reassertTopMost();
+    if (!WindowsWindowService.instance.panelMode) _pushHitTestRegions();
+  }
 
   double _panelOpenedScale = 1.0;
 
@@ -273,8 +297,11 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
           orElse: () => r.layers.isEmpty
               ? const RigLayer(name: 'head', crop: Rect.zero, zOrder: 0)
               : r.layers.last);
-      right = kSidePad + head.crop.right * s;
-      top = kBubbleSpace + head.crop.top * s;
+      // headTopRight 量的是头部图层"真实内容"右上角（裁剪框右缘多为空白）
+      final anchor =
+          r.anchor('headTopRight') ?? Offset(head.crop.right, head.crop.top);
+      right = kSidePad + anchor.dx * s;
+      top = kBubbleSpace + anchor.dy * s;
     }
     final left =
         (right + kButtonGapX).clamp(2.0, winW - kButtonSize - 2).toDouble();
@@ -353,6 +380,12 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
 
   Widget _petStack(RigData r, double petW, double petH) {
     final buttonRect = _buttonRect(petW, petH);
+    // 气泡贴着"头部真实内容顶部"：原来钉在窗口顶部，放大后窗口占满工作区，
+    // 气泡就飘到屏幕顶端了。用 bottom 定位，气泡高度变化也不会跑偏。
+    final headTop = r.anchor('headTopCenter')?.dy ?? r.canvasH * 0.235;
+    final bubbleBottom = (petH - headTop * engine.scale + 8)
+        .clamp(0.0, petH + kBubbleSpace - 40)
+        .toDouble();
     final bubbleText = engine.bubbleText;
     _syncBubbleBand(bubbleText != null);
     final shown = bubbleText == null
@@ -404,7 +437,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
             Positioned(
               left: 0,
               right: 0,
-              top: 0,
+              bottom: bubbleBottom,
               child: Center(child: SpeechBubble(text: shown)),
             ),
           if (Config.instance.dialogue) _IdleBubbleTicker(engine: engine),
@@ -415,6 +448,8 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
 
   @override
   void dispose() {
+    _topGuard?.cancel();
+    windowManager.removeListener(this);
     poller.stop();
     engine.dispose();
     super.dispose();

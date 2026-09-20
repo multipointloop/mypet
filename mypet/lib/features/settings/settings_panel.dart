@@ -65,7 +65,7 @@ class SettingsPanel extends StatelessWidget {
                         _section('交互', [
                           _switch('鼠标穿透（背景直接放行）', cfg.clickThrough,
                               cfg.setClickThrough,
-                              subtitle: '宠物半透明且不可点；面板关闭后才生效，避免把面板自己锁死'),
+                              subtitle: '开启穿透后，桌宠将暂时隐藏，点击屏幕上的小眼睛或按下 Ctrl+Alt+T 即可恢复。'),
                           _switch('松手重力下落', cfg.gravityFall, cfg.setGravityFall,
                               subtitle: '关闭时拖到哪里就停在哪里'),
                           _switch('键盘互动 Bongo Cat', cfg.bongoHook,

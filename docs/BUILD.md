@@ -36,7 +36,7 @@ flutter doctor                :: 应全绿（除 Chrome）
 ```bat
 call "E:\desktop pet\dev\env.bat"
 cd /d "E:\desktop pet\mypet"
-flutter analyze                 &:: 静态检查，当前 0 issues
+flutter analyze                 &:: 静态检查（发版前必须 0 issues）
 flutter build windows --release
 ```
 
@@ -120,3 +120,28 @@ adb install -r dist\MyPet.apk        &:: platform-tools 已在 dev\android-sdk
 | 键盘互动无反应 | 设置里 Bongo Cat 开关默认关闭（防杀软误报/反作弊冲突） |
 | 眼睛不追鼠标 | 全局追踪基于 GetCursorPos 轮询，检查是否处于穿透状态（不影响）|
 | gradle 报 JDK 版本 | 确认 `call env.bat` 已执行（JAVA_HOME 指向 dev\jdk17） |
+| 设置面板打不开 / 关不掉 | 托盘菜单或 `Ctrl+Alt+S` 均可切换；面板置顶显示，托盘是兜底入口 |
+| 想排查崩溃 / 异常 | 设置面板 → 系统 →「打开日志目录」（`%APPDATA%\com.mypet\mypet\logs`，单文件 2MB 滚动、最多 5 个；开关在同一处） |
+---
+
+## 六、版本号管理规范（每次发版必做）
+
+`mypet/pubspec.yaml` 的 `version:` 是**唯一版本源**：它同时决定 Windows 构建信息与 Android 的
+`versionName` / `versionCode`。Android 覆盖安装要求 **versionCode 严格递增**，不递增会直接安装失败。
+
+1. 发版前修改 `mypet\pubspec.yaml`：`version: X.Y.Z+N`，其中 **N 必须比上一版大 1**
+   （例：`1.0.1+2` -> `1.0.2+3`）。永远保留 `+N`，不要写成 `1.0.2`。
+2. 同一版本号必须同步到 `dist\setup.iss` 的 `#define MyAppVersion`（该文件的 AppId 为非法的 GUID，需一并修正）。
+3. 打包前核对：
+   ```bat
+   findstr /n "^version:" "E:\desktop pet\mypet\pubspec.yaml"
+   findstr /n "MyAppVersion" "E:\desktop pet\dist\setup.iss"
+   ```
+4. 两端重新构建后，用新 apk 覆盖安装旧版验证（versionCode 不足会直接安装失败）。
+5. 每次发版在下表追加一行。
+
+| 版本 | 日期 | 说明 |
+|---|---|---|
+| 1.0.0+1 | 2026-09-13 | 首个可运行版本（设置面板为独立多窗口，存在拖尺寸崩溃缺陷） |
+| 1.0.1+2 | 2026-09-20 | 修复崩溃：移除 desktop_multi_window，改单窗口双形态；新增诊断日志 |
+

@@ -82,4 +82,22 @@ void main() {
     expect(e.fold, 0);
     expect(e.foldPhase, FoldPhase.idle);
   });
+
+  test('落体停在地面线（groundY 回归测试）', () {
+    Offset? last;
+    final e = PetEngine()
+      ..rig = rig()
+      ..windowW = 200
+      ..windowH = 400
+      ..groundY = 900
+      ..windowPos = const Offset(10, 0)
+      ..onWindowMoveRequested = ((p) => last = p);
+    e.startFall();
+    for (var i = 0; i < 900; i++) {
+      e.advancePhysics(1 / 60);
+    }
+    expect(e.windowPos.dy + e.windowH, closeTo(900, 1.0));
+    expect(e.physicsActive, isFalse);
+    expect(last, isNotNull);
+  });
 }

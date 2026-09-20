@@ -13,6 +13,29 @@ import '../../core/trace.dart';
 import '../../features/pet/pet_engine.dart';
 import 'native_channel.dart';
 
+/// 把原生简易调整栏的选项分发给回调（顶层纯函数，便于单测）：
+/// 0 放大 / 1 缩小 / 2 鼠标穿透 / 3 设置面板 / 4 退出；其它 id 忽略。
+void dispatchQuickMenu(
+  int id, {
+  required ValueChanged<double> onScaleDelta,
+  required VoidCallback onToggleClickThrough,
+  required VoidCallback onToggleSettings,
+  required VoidCallback onQuit,
+}) {
+  switch (id) {
+    case 0:
+      onScaleDelta(0.1);
+    case 1:
+      onScaleDelta(-0.1);
+    case 2:
+      onToggleClickThrough();
+    case 3:
+      onToggleSettings();
+    case 4:
+      onQuit();
+  }
+}
+
 /// Owns the Windows shell around the pet: transparent frameless window,
 /// always-on-top, click-through, tray menu, auto start, work-area lookup.
 class WindowsWindowService {
@@ -346,28 +369,16 @@ class WindowsWindowService {
     }
   }
 
-  /// 原生简易调整栏的选项：0 放大 / 1 缩小 / 2 穿透 / 3 设置面板 / 4 退出
-  void handleQuickMenu(int id) {
-    switch (id) {
-      case 0:
-        _fireScaleUp();
-      case 1:
-        _fireScaleDown();
-      case 2:
-        _fireClickThrough();
-      case 3:
-        _fireSettings();
-      case 4:
-        _fireQuit();
-    }
-  }
+  /// 原生简易调整栏的分发（映射在 dispatchQuickMenu，便于单测）
+  void handleQuickMenu(int id) => dispatchQuickMenu(
+        id,
+        onScaleDelta: (d) => onScaleDelta?.call(d),
+        onToggleClickThrough: () => onToggleClickThrough?.call(),
+        onToggleSettings: () => onToggleSettings?.call(),
+        onQuit: () => onQuit?.call(),
+      );
 
-  // dynamic click-through / bongo items are managed by rebuilding the menu
-  void _fireScaleUp() => onScaleDelta?.call(0.1);
-  void _fireClickThrough() => onToggleClickThrough?.call();
-  void _fireScaleDown() => onScaleDelta?.call(-0.1);
   void _fireSettings() => onToggleSettings?.call();
-  void _fireQuit() => onQuit?.call();
 
   Future<void> disposeTray() => _tray.destroy();
 }

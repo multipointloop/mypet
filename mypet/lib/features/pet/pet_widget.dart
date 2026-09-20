@@ -13,9 +13,8 @@ import '../../platform/win/native_channel.dart';
 import '../../platform/win/window_service.dart';
 import 'dialogue_bubble.dart';
 import 'pet_engine.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import '../../core/trace.dart';
-import '../../main.dart' show openSettingsWindow;
+import '../settings/settings_panel.dart';
 
 /// Layout constants (logical px at petScale = 1.0).
 const double kBasePetWidth = 260;
@@ -82,7 +81,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
       cfg.applyToPlatform();
       setState(() {});
     };
-    win.onToggleSettings = () => openSettingsWindow();
+    win.onToggleSettings = () => _toggleSettings();
     win.onQuit = () => windowManager.destroy();
     await win.initTray();
 
@@ -99,7 +98,7 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
       } else if (id == 1) {
         _applyScale((cfg.petScale - 0.1).clamp(0.35, 2.5));
       } else if (id == 3) {
-        openSettingsWindow();
+        _toggleSettings();
       } else if (id == 2) {
         // Ctrl+Alt+T: click-through toggle (also the way OUT, since in
         // passthrough mode only the on-pet button stays clickable)
@@ -116,20 +115,6 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
 
     engine.start();
     if (mounted) setState(() {});
-
-    // TEMP crash repro: auto-open the settings window 4s after boot
-    assert(() {
-      Timer(const Duration(seconds: 4), () async {
-        debugPrint('[repro] opening settings window...');
-        try {
-          await openSettingsWindow();
-          debugPrint('[repro] settings window opened OK');
-        } catch (e) {
-          debugPrint('[repro] openSettingsWindow threw: $e');
-        }
-      });
-      return true;
-    }());
   }
 
   double _lastAppliedScale = 0;
@@ -148,6 +133,26 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
       cfg.applyToPlatform(); // bongo/autostart/click-through, same engine
     }
     setState(() {});
+  }
+
+  bool _panelOpen = false;
+
+  void _toggleSettings() {
+    if (_panelOpen) {
+      _closeSettings();
+    } else {
+      _openSettings();
+    }
+  }
+
+  void _openSettings() {
+    if (_panelOpen) return;
+    setState(() => _panelOpen = true);
+  }
+
+  void _closeSettings() {
+    if (!_panelOpen) return;
+    setState(() => _panelOpen = false);
   }
 
   Future<void> _applyScale(double petScale) async {
@@ -233,69 +238,83 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: AnimatedBuilder(
-        animation: Listenable.merge([engine, Config.instance]),
-        builder: (context, _) {
-          final bubbleText = engine.bubbleText;
-          final shown = bubbleText == null
-              ? ''
-              : bubbleText.substring(
-                  0,
-                  engine.bubbleChars.clamp(1, bubbleText.length).floor(),
-                );
-          return SizedBox(
-            width: petW + kSidePad * 2,
-            height: petH + kBubbleSpace,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: kSidePad,
-                  top: kBubbleSpace,
-                  width: petW,
-                  height: petH,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTapUp: _onTap,
-                    onPanStart: _onDragStart,
-                    child: PetRigView(
-                        rig: r, pose: engine.pose(), scale: engine.scale),
-                  ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _panelOpen
+            ? SettingsPanel(
+                key: const ValueKey('panel'),
+                onClose: _closeSettings,
+                onScaleChanged: _applyScale,
+              )
+            : KeyedSubtree(
+                key: const ValueKey('pet'),
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([engine, Config.instance]),
+                  builder: (context, _) => _petStack(r, petW, petH),
                 ),
-                Positioned(
-                  left: kSidePad,
-                  top: kBubbleSpace,
-                  width: petW,
-                  height: petH,
-                  child: IgnorePointer(
-                    child: BongoPaws(
-                      leftT: engine.bongoLeftT,
-                      rightT: engine.bongoRightT,
-                      width: petW,
-                      height: petH,
-                    ),
-                  ),
-                ),
-                // click-through toggle (top-right corner of the window):
-                // it stays clickable even in passthrough mode (C++ hit-test
-                // keeps this rect alive)
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: _ThroughButton(onToggle: _toggleClickThrough),
-                ),
-                if (bubbleText != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: Center(child: SpeechBubble(text: shown)),
-                  ),
-                if (Config.instance.dialogue) _IdleBubbleTicker(engine: engine),
-              ],
-            ),
+              ),
+      ),
+    );
+  }
+
+  Widget _petStack(RigData r, double petW, double petH) {
+    final bubbleText = engine.bubbleText;
+    final shown = bubbleText == null
+        ? ''
+        : bubbleText.substring(
+            0,
+            engine.bubbleChars.clamp(1, bubbleText.length).floor(),
           );
-        },
+    return SizedBox(
+      width: petW + kSidePad * 2,
+      height: petH + kBubbleSpace,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: kSidePad,
+            top: kBubbleSpace,
+            width: petW,
+            height: petH,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTapUp: _onTap,
+              onPanStart: _onDragStart,
+              child: PetRigView(
+                  rig: r, pose: engine.pose(), scale: engine.scale),
+            ),
+          ),
+          Positioned(
+            left: kSidePad,
+            top: kBubbleSpace,
+            width: petW,
+            height: petH,
+            child: IgnorePointer(
+              child: BongoPaws(
+                leftT: engine.bongoLeftT,
+                rightT: engine.bongoRightT,
+                width: petW,
+                height: petH,
+              ),
+            ),
+          ),
+          // click-through toggle (top-right corner of the window):
+          // it stays clickable even in passthrough mode (C++ hit-test
+          // keeps this rect alive)
+          Positioned(
+            right: 2,
+            top: 2,
+            child: _ThroughButton(onToggle: _toggleClickThrough),
+          ),
+          if (bubbleText != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: Center(child: SpeechBubble(text: shown)),
+            ),
+          if (Config.instance.dialogue) _IdleBubbleTicker(engine: engine),
+        ],
       ),
     );
   }
@@ -405,33 +424,6 @@ class _AndroidOverlayPetState extends State<AndroidOverlayPet> {
     });
     engine.start();
     if (mounted) setState(() {});
-
-    // TEMP crash repro (debug only): open the settings window then spam
-    // configChanged like a slider drag would
-    assert(() {
-      Timer(const Duration(seconds: 5), () async {
-        debugPrint('[repro] opening settings window...');
-        try {
-          await openSettingsWindow();
-          debugPrint('[repro] opened OK');
-        } catch (e) {
-          debugPrint('[repro] open FAILED: $e');
-          return;
-        }
-        await Future.delayed(const Duration(seconds: 2));
-        for (var i = 0; i < 15; i++) {
-          try {
-            await DesktopMultiWindow.invokeMethod(0, 'configChanged');
-            debugPrint('[repro] ping $i ok');
-          } catch (e) {
-            debugPrint('[repro] ping $i FAILED: $e');
-          }
-          await Future.delayed(const Duration(milliseconds: 60));
-        }
-        debugPrint('[repro] sequence complete, still alive');
-      });
-      return true;
-    }());
   }
 
   @override

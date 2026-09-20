@@ -54,4 +54,6 @@ flutter:
     - assets/rig.json
     - assets/parts/
     - assets/sounds/
-    - assets/icon/
+    # 只打包运行时要用的托盘图标；
+    # assets/icon/icon.png 仅构建期供 flutter_launcher_icons 读取（省 ~249KB）
+    - assets/icon/tray.ico

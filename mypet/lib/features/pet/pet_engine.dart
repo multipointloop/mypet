@@ -190,15 +190,43 @@ class PetEngine with ChangeNotifier {
 
     // -- window physics (gravity fall; the drag itself is the native
     // HTCAPTION loop, which moves the window without any Dart involvement)
-    if (!dragActive && physicsActive) {
-      _stepPhysics(d);
-    }
+    advancePhysics(d);
 
     // -- bongo paw decay
     bongoLeftT = (bongoLeftT - d).clamp(0.0, 1.0);
     bongoRightT = (bongoRightT - d).clamp(0.0, 1.0);
 
+    // 轻量化：完全空闲时把"重建+重绘"降到 30fps（呼吸/眨眼都够用），
+    // 有任何交互/物理/折叠/气泡/视线未收敛时仍保持 60fps。
+    if (_busy) {
+      _idleAccum = 0;
+    } else {
+      _idleAccum += d;
+      if (_idleAccum < _idleFrameStep) return;
+      _idleAccum = 0;
+    }
     notifyListeners();
+  }
+
+  double _idleAccum = 0;
+  static const double _idleFrameStep = 1 / 30;
+
+  bool get _busy {
+    if (physicsActive || dragActive) return true;
+    if (foldPhase != FoldPhase.idle) return true;
+    if (_jumpVel != 0 || jumpY > 0) return true;
+    if (_wagT > 0 || _squashT > 0 || _exprT > 0) return true;
+    if (_blinkAnimating || bubbleText != null) return true;
+    if (bongoLeftT > 0 || bongoRightT > 0) return true;
+    if ((gaze - gazeTarget).distance > 0.02) return true;
+    return false;
+  }
+
+  /// 由 tick 驱动落体；测试可直接喂 dt
+  /// （groundY 曾因二次扣高把宠物送到屏幕外，这里留一个可回归的入口）。
+  void advancePhysics(double d) {
+    if (dragActive || !physicsActive) return;
+    _stepPhysics(d);
   }
 
   PetPose pose() {

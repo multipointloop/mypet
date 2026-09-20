@@ -373,9 +373,12 @@ class _WindowsPetHomeState extends State<WindowsPetHome> with WindowListener {
               )
             : KeyedSubtree(
                 key: const ValueKey('pet'),
-                child: AnimatedBuilder(
-                  animation: Listenable.merge([engine, Config.instance]),
-                  builder: (context, _) => _petStack(r, petW, petH),
+                // 独立重绘层：宠物动画不会带着背景/面板一起重绘
+                child: RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([engine, Config.instance]),
+                    builder: (context, _) => _petStack(r, petW, petH),
+                  ),
                 ),
               ),
       ),

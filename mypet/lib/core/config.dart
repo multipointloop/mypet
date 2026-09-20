@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class Config extends ChangeNotifier {
   static const _kClickThroughOpacity = 'clickThroughOpacity';
   static const _kGravityFall = 'gravityFall';
   static const _kDiagnostics = 'diagnostics';
+  static const _kDialogueLines = 'dialogueLines';
 
   SharedPreferences? _sp;
   bool _loaded = false;
@@ -42,6 +44,9 @@ class Config extends ChangeNotifier {
   double clickThroughOpacity = 0.55;
   bool gravityFall = false; // off: pet stays where dropped (free vertical)
   bool diagnostics = true; // 诊断日志开关（默认开启）
+
+  /// 用户自定义台词：key -> 台词列表（每行一条）。空/缺失 = 用内置默认。
+  Map<String, List<String>> dialogueLines = {};
 
   Future<void> load() async {
     if (_loaded) return;
@@ -61,6 +66,16 @@ class Config extends ChangeNotifier {
     clickThroughOpacity = sp.getDouble(_kClickThroughOpacity) ?? 0.55;
     gravityFall = sp.getBool(_kGravityFall) ?? false;
     diagnostics = sp.getBool(_kDiagnostics) ?? true;
+    final rawLines = sp.getString(_kDialogueLines);
+    if (rawLines != null) {
+      try {
+        final decoded = jsonDecode(rawLines) as Map<String, dynamic>;
+        dialogueLines = decoded.map((k, v) => MapEntry(
+            k, (v as List).map((e) => e.toString()).toList()));
+      } catch (_) {
+        dialogueLines = {};
+      }
+    }
     _loaded = true;
     Trace.enabled = diagnostics;
   }
@@ -127,6 +142,13 @@ class Config extends ChangeNotifier {
   void setGravityFall(bool v) => _set(_kGravityFall, v);
   void setDiagnostics(bool v) => _set(_kDiagnostics, v);
   void setScale(double v) => _set(_kScale, v);
+
+  /// 保存用户自定义台词（空列表 = 该键恢复内置默认）。
+  Future<void> setDialogueLines(Map<String, List<String>> lines) async {
+    dialogueLines = lines;
+    await _sp?.setString(_kDialogueLines, jsonEncode(lines));
+    notifyListeners();
+  }
 
   /// Push the current settings down into the platform services.
   /// 尺寸不在这里处理：窗口几何必须由调用方显式 resize 一次，

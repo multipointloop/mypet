@@ -34,10 +34,32 @@ const Map<String, List<String>> linePools = {
   ],
 };
 
-String pickLine(String key, [Random? rng]) {
+/// 设置面板里的编辑顺序与显示名。
+const List<String> dialogueKeys = ['idle', 'head', 'body', 'tail', 'sleep'];
+
+const Map<String, String> dialogueLabels = {
+  'idle': '闲置随机搭话',
+  'head': '点击头部',
+  'body': '点击身体',
+  'tail': '点击尾巴',
+  'sleep': '打瞌睡',
+};
+
+List<String> defaultLines(String key) => linePools[key] ?? const <String>[];
+
+/// 取一条台词。[overrides] 是用户在设置面板里写的自定义台词
+/// （每行一条）：该键存在且非空时优先，否则回退内置默认。
+String pickLine(String key, [Random? rng, Map<String, List<String>>? overrides]) {
   final r = rng ?? Random();
-  final pool = (linePools[key]?.isNotEmpty ?? false)
-      ? linePools[key]!
-      : linePools['idle']!;
+  final custom = overrides?[key];
+  final builtin = linePools[key];
+  final List<String> pool;
+  if (custom != null && custom.isNotEmpty) {
+    pool = custom;
+  } else if (builtin != null && builtin.isNotEmpty) {
+    pool = builtin;
+  } else {
+    pool = linePools['idle']!;
+  }
   return pool[r.nextInt(pool.length)];
 }

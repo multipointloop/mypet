@@ -344,10 +344,15 @@ class WindowsWindowService {
       await _tray.setContextMenu(menu);
 
       _tray.registerSystemTrayEventHandler((eventName) {
+        // 左键单击 = 打开/关闭设置面板（与常见应用一致）
         if (eventName == kSystemTrayEventClick) {
-          _tray.popUpContextMenu();
-        } else if (eventName == kSystemTrayEventDoubleClick) {
           _fireSettings();
+        } else if (eventName == kSystemTrayEventDoubleClick) {
+          // 双击兜底：部分系统把两次单击合成为双击
+          _fireSettings();
+        } else if (eventName == kSystemTrayEventRightClick) {
+          // 右键 = 图标处的简易调整栏（放大/缩小/鼠标穿透/设置面板/退出）
+          _tray.popUpContextMenu();
         }
       });
     } catch (_) {

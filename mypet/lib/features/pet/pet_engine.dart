@@ -58,6 +58,10 @@ class PetEngine with ChangeNotifier {
   DateTime _nextIdleBubbleAt = DateTime.now();
   final math.Random _lineRng = math.Random();
 
+  /// 取台词：优先用户自定义（设置面板可编辑），否则内置默认。
+  String _line(String key) =>
+      pickLine(key, _lineRng, Config.instance.dialogueLines);
+
   // ---- physics (Windows drag & fall) ----
   bool physicsActive = false;
   bool dragActive = false; // native OS drag loop in progress (freeze gaze)
@@ -167,7 +171,7 @@ class PetEngine with ChangeNotifier {
     }
     if (_idleFor > const Duration(seconds: 90) && mood != PetMood.sleepy) {
       mood = PetMood.sleepy;
-      showBubble(pickLine('sleep'));
+      showBubble(_line('sleep'));
     }
 
     // -- dialogue typewriter & hide
@@ -274,24 +278,23 @@ class PetEngine with ChangeNotifier {
     switch (region) {
       case PetRegion.head:
         AudioService.instance.play('bounce');
-        AudioService.instance.play('surprise'); // layered; silent if missing
         _jumpVel = 320; // hop!
         _exprT = 0.5; // wide eyes
         _wagT = 1.2; // happy tail
         if (Config.instance.dialogue && _rng.nextBool()) {
-          showBubble(pickLine('head', _lineRng));
+          showBubble(_line('head'));
         }
       case PetRegion.body:
         AudioService.instance.play('click_body');
         _squashT = 0.35;
         if (Config.instance.dialogue && _rng.nextDouble() < 0.4) {
-          showBubble(pickLine('body', _lineRng));
+          showBubble(_line('body'));
         }
       case PetRegion.tail:
         AudioService.instance.play('click_tail');
         _wagT = 2.0;
         if (Config.instance.dialogue && _rng.nextDouble() < 0.3) {
-          showBubble(pickLine('tail', _lineRng));
+          showBubble(_line('tail'));
         }
       case PetRegion.legs:
         startFold();
@@ -378,7 +381,7 @@ class PetEngine with ChangeNotifier {
   void maybeIdleBubble() {
     if (bubbleText != null) return;
     if (DateTime.now().isAfter(_nextIdleBubbleAt)) {
-      showBubble(pickLine('idle', _lineRng), idle: true);
+      showBubble(_line('idle'), idle: true);
       _scheduleIdleBubble();
     }
   }

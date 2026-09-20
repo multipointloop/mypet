@@ -4,6 +4,7 @@ import '../../core/config.dart';
 import '../../core/rig_model.dart';
 import '../../core/rig_view.dart';
 import '../../core/trace.dart';
+import '../pet/dialogue_lines.dart';
 import '../pet/pet_engine.dart';
 
 /// Windows 设置面板：直接嵌在宠物窗口内渲染，不再另开引擎/窗口。
@@ -77,6 +78,23 @@ class SettingsPanel extends StatelessWidget {
                           _switch('音效', cfg.sound, cfg.setSound),
                           _slider('音量', cfg.volume, 0, 1, cfg.setVolume),
                           _switch('随机眨眼', cfg.idleBlink, cfg.setIdleBlink),
+                        ]),
+                        _section('台词（气泡）', [
+                          for (final key in dialogueKeys)
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16),
+                              dense: true,
+                              title: Text(dialogueLabels[key] ?? key,
+                                  style: const TextStyle(fontSize: 13.5)),
+                              subtitle: Text(_linesSummary(cfg, key),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Colors.black45)),
+                              trailing: const Icon(Icons.edit, size: 18),
+                              onTap: () => _editLines(context, cfg, key),
+                            ),
                         ]),
                         _section('系统', [
                           _switch('开机自启', cfg.autostart, cfg.setAutostart),
@@ -163,6 +181,73 @@ class SettingsPanel extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static const String _kReset = '__reset__';
+  static const String _kNewline = '\n';
+
+  String _linesSummary(Config cfg, String key) {
+    final custom = cfg.dialogueLines[key];
+    final isCustom = custom != null && custom.isNotEmpty;
+    final n = isCustom ? custom.length : defaultLines(key).length;
+    return '${isCustom ? '自定义' : '默认'} · $n 条';
+  }
+
+  /// 台词编辑弹窗：一行一条；全部删除 = 恢复内置默认。
+  Future<void> _editLines(
+      BuildContext context, Config cfg, String key) async {
+    final custom = cfg.dialogueLines[key];
+    final initial = (custom != null && custom.isNotEmpty)
+        ? custom.join(_kNewline)
+        : defaultLines(key).join(_kNewline);
+    final controller = TextEditingController(text: initial);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('编辑台词 · ${dialogueLabels[key] ?? key}'),
+        content: SizedBox(
+          width: 420,
+          child: TextField(
+            controller: controller,
+            minLines: 6,
+            maxLines: 10,
+            decoration: const InputDecoration(
+              hintText: '每行一条台词；全部删除 = 恢复内置默认',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, _kReset),
+              child: const Text('恢复默认')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('保存')),
+        ],
+      ),
+    );
+    if (result == null) return;
+    final next = Map<String, List<String>>.from(cfg.dialogueLines);
+    if (result == _kReset) {
+      next.remove(key);
+    } else {
+      final lines = result
+          .split(_kNewline)
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (lines.isEmpty) {
+        next.remove(key);
+      } else {
+        next[key] = lines;
+      }
+    }
+    await cfg.setDialogueLines(next);
+    onApplied();
   }
 
   Widget _header() {

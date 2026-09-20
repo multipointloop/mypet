@@ -53,6 +53,7 @@ class WindowsWindowService {
       ),
       () async {
         await windowManager.setAsFrameless();
+        await windowManager.setResizable(false);
         await windowManager.setBackgroundColor(Colors.transparent);
         await windowManager.setAlwaysOnTop(true);
         await windowManager.show();
@@ -106,15 +107,21 @@ class WindowsWindowService {
   /// just the toggle button so the user can always turn it back off.
   Future<void> setClickThrough(bool enabled) async {
     Trace.log('setClickThrough $enabled');
+    if (_panelMode) {
+      // 面板期间只写 Config：立刻推 fullPassthrough 会让面板自己失去点击
+      Trace.log('setClickThrough deferred (panel open)');
+      return;
+    }
     await _pushHitTest(fullPassthrough: enabled);
     Trace.log('setClickThrough pushed');
   }
 
   /// Whole-window alpha (normal vs click-through ghosting).
   Future<void> setOpacity(double opacity) async {
-    Trace.log('setOpacity $opacity');
+    Trace.log('setOpacity $opacity panel=$_panelMode');
     try {
-      await windowManager.setOpacity(opacity.clamp(0.1, 1.0));
+      final target = _panelMode ? 1.0 : opacity.clamp(0.1, 1.0);
+      await windowManager.setOpacity(target);
     } catch (_) {
       // opacity is cosmetic - never fail on it
     }
@@ -130,6 +137,7 @@ class WindowsWindowService {
   }) async {
     _petRect = pet;
     _buttonRect = button;
+    if (_panelMode) return; // 面板期间保持整窗可交互
     await _pushHitTest(fullPassthrough: fullPassthrough);
   }
 
@@ -148,6 +156,94 @@ class WindowsWindowService {
         button.right * dpr, button.bottom * dpr,
       ],
     );
+  }
+
+  // ================= 设置面板形态（单窗口双形态） =================
+  //
+  // 宠物形态：透明/无框/置顶/区域级穿透，尺寸随 petScale 变化。
+  // 面板形态：固定尺寸/居中/整窗可交互/不透明，尺寸与兽形解耦。
+  // 切换过程中刻意**不触碰 acrylic 透明效果**（减少 DWM 重设面）。
+
+  static const Size panelSize = Size(640, 460);
+  static const double _kSidePad = 10;
+  static const double _kBubbleSpace = 120;
+
+  bool _panelMode = false;
+  bool get panelMode => _panelMode;
+  Rect? _savedPetBounds;
+  bool _savedPhysics = false;
+
+  /// 进入面板形态：暂存宠物 bounds -> 暂停落体 -> 整窗可交互 -> 固定尺寸居中。
+  Future<void> enterPanelMode() async {
+    if (_panelMode) return;
+    _panelMode = true;
+    Trace.log('enterPanelMode');
+
+    final e = _engine;
+    final pos = await windowManager.getPosition();
+    final size = await windowManager.getSize();
+    _savedPetBounds = Rect.fromLTWH(pos.dx, pos.dy, size.width, size.height);
+    Trace.log('enterPanelMode saved=$_savedPetBounds');
+
+    if (e != null) {
+      // 加固点 1：面板开着时停止落体，否则 _stepPhysics 会把面板窗口自己拖下去
+      _savedPhysics = e.physicsActive;
+      e.physicsActive = false;
+      e.dragActive = false;
+      e.windowVel = Offset.zero;
+    }
+
+    // 加固点 2：整窗可交互（否则 C++ 区域 hit-test 把面板点击全部放行到桌面）
+    final dpr = e?.devicePixelRatio ?? 1;
+    await NativeChannel.instance.setHitTest(
+      full: false,
+      pet: [0, 0, panelSize.width * dpr, panelSize.height * dpr],
+      button: const [0, 0, 0, 0],
+    );
+
+    await windowManager.setOpacity(1.0);
+    await windowManager.setSize(panelSize);
+    await windowManager.center();
+    await windowManager.focus();
+    await windowManager.setAlwaysOnTop(true);
+    Trace.log('enterPanelMode done');
+  }
+
+  /// 退出面板形态。
+  /// [applyPetResize] = 面板期间是否改过尺寸；改过则按"脚底不动"重算高度。
+  /// 这里直接还原 bounds 并回写引擎几何，绕开 resizeToPet 的首次停靠逻辑。
+  Future<void> exitPanelMode({required bool applyPetResize}) async {
+    if (!_panelMode) return;
+    _panelMode = false;
+    Trace.log('exitPanelMode applyPetResize=$applyPetResize');
+
+    final e = _engine;
+    final b = _savedPetBounds;
+    _savedPetBounds = null;
+
+    if (b != null && e != null) {
+      var w = b.width;
+      var h = b.height;
+      if (applyPetResize) {
+        final r = e.rig;
+        if (r != null) {
+          w = r.canvasW * e.scale + _kSidePad * 2;
+          h = r.canvasH * e.scale + _kBubbleSpace;
+        }
+      }
+      // 加固点 4：脚底不动 —— 变高向上长，变矮向下收
+      final top = b.top + (b.height - h);
+      await windowManager.setSize(Size(w, h));
+      await windowManager.setPosition(Offset(b.left, top));
+      e.windowW = w;
+      e.windowH = h;
+      e.windowPos = Offset(b.left, top);
+      e.groundY = (await workAreaRectLogical()).bottom - h;
+      if (_savedPhysics) e.startFall();
+    }
+
+    await _pushHitTest(fullPassthrough: false);
+    Trace.log('exitPanelMode done');
   }
 
   Future<void> setBongoHook(bool enabled) async {

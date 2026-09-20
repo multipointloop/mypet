@@ -116,6 +116,8 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
   bool _applyingScale = false;
   double? _pendingScale;
 
+  double _panelOpenedScale = 1.0;
+
   void _toggleSettings() {
     if (_panelOpen) {
       _closeSettings();
@@ -124,14 +126,33 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
     }
   }
 
-  void _openSettings() {
+  /// 进入设置形态：UI 先切到面板，再把窗口改成固定尺寸/居中/整窗可交互。
+  Future<void> _openSettings() async {
     if (_panelOpen) return;
+    _panelOpenedScale = Config.instance.petScale;
     setState(() => _panelOpen = true);
+    await WindowsWindowService.instance.enterPanelMode();
   }
 
-  void _closeSettings() {
+  /// 退出设置形态：先按"脚底不动"还原窗口，再恢复宠物交互区域与穿透/透明度。
+  /// 穿透的 hit-test 推送被推迟到这里（window_service 里对面板态做了闸门）。
+  Future<void> _closeSettings() async {
     if (!_panelOpen) return;
+    final changed =
+        (Config.instance.petScale - _panelOpenedScale).abs() > 0.0001;
+    await WindowsWindowService.instance.exitPanelMode(applyPetResize: changed);
+    if (!mounted) return;
     setState(() => _panelOpen = false);
+    _pushHitTestRegions();
+    await Config.instance.applyToPlatform();
+  }
+
+  /// 面板内拖尺寸滑杆：只更新配置与右侧实时预览，绝不缩放窗口。
+  void _setScaleFromPanel(double v) {
+    Config.instance.setScale(v);
+    final r = rig;
+    if (r != null) engine.scale = kBasePetWidth / r.canvasW * v;
+    setState(() {});
   }
 
   /// 唯一的尺寸入口：先写配置，再做一次窗口重排。
@@ -240,8 +261,10 @@ class _WindowsPetHomeState extends State<WindowsPetHome> {
         child: _panelOpen
             ? SettingsPanel(
                 key: const ValueKey('panel'),
+                rig: r,
+                engine: engine,
                 onClose: _closeSettings,
-                onScaleChanged: _applyScale,
+                onScaleChanged: _setScaleFromPanel,
               )
             : KeyedSubtree(
                 key: const ValueKey('pet'),

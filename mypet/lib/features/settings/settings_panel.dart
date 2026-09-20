@@ -1,21 +1,31 @@
 import 'package:flutter/material.dart';
 
 import '../../core/config.dart';
+import '../../core/rig_model.dart';
+import '../../core/rig_view.dart';
+import '../pet/pet_engine.dart';
 
 /// Windows 设置面板：直接嵌在宠物窗口内渲染，不再另开引擎/窗口。
 ///
-/// * 面板自己绘制不透明底色（宠物窗口本身保持透明 + 不做 DWM 重设）；
-/// * 所有控件操作的是同一个 [Config] 实例，无需跨引擎轮询；
-/// * 窗口形态切换由 WindowsWindowService 负责，本 widget 只管 UI。
+/// * 面板自己绘制不透明底色（宠物窗口保持透明 + 不做 DWM 重设）；
+/// * 所有控件操作同一个 [Config] 实例，无跨引擎轮询；
+/// * 右侧是同一个 [PetEngine] 驱动的实时预览：拖尺寸滑杆只改配置与预览，
+///   窗口本身不缩放（窗口几何由 WindowsWindowService 在退出面板时统一处理）。
 class SettingsPanel extends StatelessWidget {
   const SettingsPanel({
     super.key,
+    required this.rig,
+    required this.engine,
     required this.onClose,
     required this.onScaleChanged,
   });
 
+  final RigData rig;
+  final PetEngine engine;
   final VoidCallback onClose;
   final ValueChanged<double> onScaleChanged;
+
+  static const double _kPreviewZoom = 0.30;
 
   @override
   Widget build(BuildContext context) {
@@ -26,42 +36,104 @@ class SettingsPanel extends StatelessWidget {
         children: [
           _header(),
           Expanded(
-            child: AnimatedBuilder(
-              animation: cfg,
-              builder: (context, _) => ListView(
-                padding: const EdgeInsets.fromLTRB(14, 2, 14, 18),
-                children: [
-                  _section('外观', [
-                    _slider('尺寸', cfg.petScale, 0.35, 2.5, onScaleChanged),
-                    _slider('常态透明度', cfg.normalOpacity, 0.3, 1,
-                        cfg.setNormalOpacity),
-                    _slider('穿透时透明度', cfg.clickThroughOpacity, 0.1, 1,
-                        cfg.setClickThroughOpacity),
-                  ]),
-                  _section('交互', [
-                    _switch('鼠标穿透（背景直接放行）', cfg.clickThrough,
-                        cfg.setClickThrough,
-                        subtitle: '宠物半透明且不可点，右上角小眼睛按钮始终可点，随时恢复'),
-                    _switch('松手重力下落', cfg.gravityFall, cfg.setGravityFall,
-                        subtitle: '关闭时拖到哪里就停在哪里'),
-                    _switch('键盘互动 Bongo Cat', cfg.bongoHook, cfg.setBongoHook,
-                        subtitle: '默认关闭 · 全局键盘钩子，可能触发杀软提示，游戏时建议关闭'),
-                  ]),
-                  _section('氛围', [
-                    _switch('闲置台词气泡', cfg.dialogue, cfg.setDialogue),
-                    _switch('音效', cfg.sound, cfg.setSound),
-                    _slider('音量', cfg.volume, 0, 1, cfg.setVolume),
-                    _switch('随机眨眼', cfg.idleBlink, cfg.setIdleBlink),
-                  ]),
-                  _section('系统', [
-                    _switch('开机自启', cfg.autostart, cfg.setAutostart),
-                  ]),
-                ],
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: cfg,
+                    builder: (context, _) => ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 2, 8, 18),
+                      children: [
+                        _section('外观', [
+                          _slider('尺寸', cfg.petScale, 0.35, 2.5, onScaleChanged),
+                          _slider('常态透明度', cfg.normalOpacity, 0.3, 1,
+                              cfg.setNormalOpacity),
+                          _slider('穿透时透明度', cfg.clickThroughOpacity, 0.1, 1,
+                              cfg.setClickThroughOpacity),
+                        ]),
+                        _section('交互', [
+                          _switch('鼠标穿透（背景直接放行）', cfg.clickThrough,
+                              cfg.setClickThrough,
+                              subtitle: '宠物半透明且不可点；面板关闭后才生效，避免把面板自己锁死'),
+                          _switch('松手重力下落', cfg.gravityFall, cfg.setGravityFall,
+                              subtitle: '关闭时拖到哪里就停在哪里'),
+                          _switch('键盘互动 Bongo Cat', cfg.bongoHook,
+                              cfg.setBongoHook,
+                              subtitle: '默认关闭 · 全局键盘钩子，可能触发杀软提示，游戏时建议关闭'),
+                        ]),
+                        _section('氛围', [
+                          _switch('闲置台词气泡', cfg.dialogue, cfg.setDialogue),
+                          _switch('音效', cfg.sound, cfg.setSound),
+                          _slider('音量', cfg.volume, 0, 1, cfg.setVolume),
+                          _switch('随机眨眼', cfg.idleBlink, cfg.setIdleBlink),
+                        ]),
+                        _section('系统', [
+                          _switch('开机自启', cfg.autostart, cfg.setAutostart),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                SizedBox(width: 236, child: _preview(cfg)),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// 右侧实时预览：与宠物窗口同一套图层/姿态，仅按 [_kPreviewZoom] 缩小展示。
+  /// IgnorePointer 保证它只做展示，不抢事件。
+  Widget _preview(Config cfg) {
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        const Text('实时预览', style: TextStyle(fontSize: 11, color: Colors.black45)),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: engine,
+                builder: (context, _) {
+                  final scale = engine.scale * _kPreviewZoom;
+                  return Align(
+                    alignment: Alignment.bottomCenter,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: SizedBox(
+                        width: rig.canvasW * scale,
+                        height: rig.canvasH * scale,
+                        child: PetRigView(
+                          rig: rig,
+                          pose: engine.pose(),
+                          scale: scale,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        AnimatedBuilder(
+          animation: cfg,
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              '×${cfg.petScale.toStringAsFixed(2)}',
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFB0567A)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

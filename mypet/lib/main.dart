@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'core/config.dart';
+import 'core/trace.dart';
 import 'features/pet/pet_widget.dart';
 import 'features/settings/settings_page.dart';
 import 'platform/win/window_service.dart';
@@ -25,6 +27,9 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  await Trace.init();
+  await Config.instance.load();
+  Trace.enabled = Config.instance.diagnostics;
   await WindowsWindowService.instance.boot();
   runApp(const PetApp(mode: PetMode.windows));
 }

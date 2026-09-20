@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../platform/win/window_service.dart';
 import 'audio_service.dart';
+import 'trace.dart';
 
 /// All user-facing settings, persisted via SharedPreferences and mirrored to
 /// the platform services (window size, click-through, tray menu state...).
@@ -23,6 +24,7 @@ class Config extends ChangeNotifier {
   static const _kNormalOpacity = 'normalOpacity';
   static const _kClickThroughOpacity = 'clickThroughOpacity';
   static const _kGravityFall = 'gravityFall';
+  static const _kDiagnostics = 'diagnostics';
 
   SharedPreferences? _sp;
   bool _loaded = false;
@@ -39,6 +41,7 @@ class Config extends ChangeNotifier {
   double normalOpacity = 1.0;
   double clickThroughOpacity = 0.55;
   bool gravityFall = false; // off: pet stays where dropped (free vertical)
+  bool diagnostics = true; // 诊断日志开关（默认开启）
 
   Future<void> load() async {
     if (_loaded) return;
@@ -57,7 +60,9 @@ class Config extends ChangeNotifier {
     normalOpacity = sp.getDouble(_kNormalOpacity) ?? 1.0;
     clickThroughOpacity = sp.getDouble(_kClickThroughOpacity) ?? 0.55;
     gravityFall = sp.getBool(_kGravityFall) ?? false;
+    diagnostics = sp.getBool(_kDiagnostics) ?? true;
     _loaded = true;
+    Trace.enabled = diagnostics;
   }
 
   Future<void> _save(String key, Object value) async {
@@ -102,6 +107,9 @@ class Config extends ChangeNotifier {
         clickThroughOpacity = (value as num).toDouble().clamp(0.10, 1.0);
       case _kGravityFall:
         gravityFall = value as bool;
+      case _kDiagnostics:
+        diagnostics = value as bool;
+        Trace.enabled = diagnostics;
     }
     _save(key, value);
     notifyListeners();
@@ -117,6 +125,7 @@ class Config extends ChangeNotifier {
   void setNormalOpacity(double v) => _set(_kNormalOpacity, v);
   void setClickThroughOpacity(double v) => _set(_kClickThroughOpacity, v);
   void setGravityFall(bool v) => _set(_kGravityFall, v);
+  void setDiagnostics(bool v) => _set(_kDiagnostics, v);
   void setScale(double v) => _set(_kScale, v);
 
   /// Push the current settings down into the platform services.

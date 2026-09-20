@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/config.dart';
 import '../../core/rig_model.dart';
 import '../../core/rig_view.dart';
+import '../../core/trace.dart';
 import '../pet/pet_engine.dart';
 
 /// Windows 设置面板：直接嵌在宠物窗口内渲染，不再另开引擎/窗口。
@@ -70,6 +71,24 @@ class SettingsPanel extends StatelessWidget {
                         ]),
                         _section('系统', [
                           _switch('开机自启', cfg.autostart, cfg.setAutostart),
+                          _switch('记录诊断日志', cfg.diagnostics,
+                              cfg.setDiagnostics,
+                              subtitle: '默认开启；关闭后不再写入任何日志（保护隐私）'),
+                          ListTile(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: const Text('打开日志目录',
+                                style: TextStyle(fontSize: 13.5)),
+                            subtitle: Text(
+                              Trace.logDir?.path ?? '日志目录尚未就绪',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.black45),
+                            ),
+                            trailing: const Icon(Icons.folder_open, size: 18),
+                            onTap: () => Trace.openLogDir(),
+                          ),
                         ]),
                       ],
                     ),

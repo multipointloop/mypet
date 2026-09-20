@@ -21,6 +21,7 @@ dependencies:
   # --- shared ---
   audioplayers: ^6.1.0         # click / land / key sounds
   shared_preferences: ^2.3.0
+  path_provider: ^2.1.6         # 诊断日志目录（应用专属数据目录）
 
   # --- Android overlay ---
   flutter_overlay_window: ^0.4.5

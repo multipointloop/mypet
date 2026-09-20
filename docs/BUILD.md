@@ -13,7 +13,8 @@
 | JDK | `dev\jdk17` | Temurin 17（zip 解压版） |
 | Android SDK | `dev\android-sdk` | platform 35/36 + build-tools 35/36 + platform-tools |
 | Python | `dev\py311` | 3.11.9 embeddable + rembg/onnxruntime |
-| VS 2022 Community | C 盘系统已有 | 17.14（含 C++ 桌面开发与 Win10 SDK） |
+| VS 2022 生成工具 | `dev\vs_buildtools` | 17.14.37710.0，仅装「使用 C++ 的桌面开发」工作负载（E 盘） |
+| Windows 10 SDK | C 盘（系统级，本次 10.0.26100.0） | 约 1–2 GB，随 VS 工作负载安装 |
 
 镜像：`PUB_HOSTED_URL=pub.flutter-io.cn`、`FLUTTER_STORAGE_BASE_URL=storage.flutter-io.cn`、
 pip 走清华源、u2net 模型缓存在 `dev\models\`。
@@ -26,7 +27,7 @@ cd "E:\desktop pet\dev"
 call env.bat
 ..\tools\setup_env.bat        :: pip + rembg + u2net 模型
 setup_android.bat             :: sdkmanager 组件 + licenses + flutter config
-flutter doctor                :: 应全绿（除 Chrome）
+flutter doctor                :: VS C++ 工具链必须为 √（详见 §七）；除 Chrome/Network 外应全绿
 ```
 
 ---
@@ -145,3 +146,67 @@ adb install -r dist\MyPet.apk        &:: platform-tools 已在 dev\android-sdk
 | 1.0.0+1 | 2026-09-13 | 首个可运行版本（设置面板为独立多窗口，存在拖尺寸崩溃缺陷） |
 | 1.0.1+2 | 2026-09-20 | 修复崩溃：移除 desktop_multi_window，改单窗口双形态；新增诊断日志 |
 
+
+---
+
+## 七、重装系统后如何恢复开发环境（实测于 2026-09-20）
+
+重装系统 / 大版本升级只清系统盘，**E 盘的 `dev\` 自建工具链通常仍在**。按表核对，缺哪个补哪个。
+
+| 组件 | 位置 | 重装后 | 恢复方式 |
+|---|---|---|---|
+| Flutter SDK | `dev\flutter` | 不丢（E 盘） | `call dev\env.bat` 即可用 |
+| JDK 17 | `dev\jdk17` | 不丢 | 同上（JAVA_HOME 指向它） |
+| Android SDK | `dev\android-sdk` | 不丢 | 同上 |
+| Python 3.11 + rembg | `dev\py311` | 不丢 | `tools\setup_env.bat` 可重建 |
+| **VS C++ 工具链** | `dev\vs_buildtools` | **若装在 C 盘会丢** | 见步骤 1 |
+| Windows 10 SDK | C 盘系统级 | **会丢** | 随 VS 工作负载安装（约 1–2 GB） |
+
+### 1. 装回 C++ 工具链（缺了无法构建 Windows 端）
+
+本机采用 **Visual Studio 生成工具 2022（Build Tools）**，只勾选「使用 C++ 的桌面开发」，
+并把安装位置与下载缓存都重定向到 E 盘以节省 C 盘空间：
+
+```bat
+:: 下载 vs_BuildTools.exe 后（管理员运行），示意命令：
+vs_BuildTools.exe --quiet --wait --norestart ^
+  --installPath "E:\desktop pet\dev\vs_buildtools" ^
+  --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended ^
+  --cache "E:\desktop pet\dev\downloads\vs-cache"
+```
+
+> 工作负载 ID：Build Tools 用 `Microsoft.VisualStudio.Workload.VCTools`；
+> 全量 VS Community 用 `Microsoft.VisualStudio.Workload.NativeDesktop`。
+> 两者都自带 MSVC v143 / CMake / Ninja；Windows SDK 走系统默认（C 盘）。
+
+### 2. 验收工具链
+
+```bat
+call "E:\desktop pet\dev\env.bat"
+flutter doctor -v
+```
+
+必须看到（否则 Windows 端必然构建失败）：
+
+```
+[√] Visual Studio - develop Windows apps (Visual Studio 生成工具 2022 17.14.41 (September 2026))
+    • Visual Studio at E:\desktop pet\dev\vs_buildtools
+    • Windows 10 SDK version 10.0.26100.0
+```
+
+### 3. 重装后第一次构建
+
+```bat
+cd /d "E:\desktop pet\mypet"
+flutter clean
+flutter pub get
+flutter build windows --release
+```
+
+实测：clean 后完整构建约 **250 s**，产物 `build\windows\x64\runner\Release\mypet.exe`。
+
+### 4. 已知告警（可忽略，不要为此改路径）
+
+- `flutter doctor` 报 Android SDK 路径含空格（`E:\desktop pet\dev\android-sdk`）：本项目 APK 实测可正常构建；
+- `flutter doctor` 报 `Network resources` / Chrome 缺失：不影响 Windows/Android 构建；
+- 因 C 盘空间紧张卸载 VS 后，`flutter build windows` 会报 `Unable to find suitable Visual Studio toolchain`——按步骤 1 装回即可，**不要改任何代码路径**。
